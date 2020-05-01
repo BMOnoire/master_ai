@@ -4,8 +4,9 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.feature import corner_harris
-# conda install -c menpo opencv
+import copy
 
+# conda install -c menpo opencv
 
 def get_script_variables():
     if len(sys.argv) < 3:
@@ -32,35 +33,33 @@ def get_script_variables():
 
     return img_path_list
 
-
 def get_image_list(img_path_list, filter = None):
     if filter == None:
         return [cv2.imread(str(path))for path in img_path_list]
     else:
         return [cv2.cvtColor(cv2.imread(str(path)), filter) for path in img_path_list]
 
-
-def show_image(img, title = ""):
+def show_image(img_src, filter = None):
+    img = copy.deepcopy(img_src)
+    if filter:
+        img = cv2.cvtColor(img, filter)
     plt.imshow(img)
-    plt.title(title)
     plt.show()
-    #print(img.shape)
 
-
-def show_multi_images(img_list, col_max_len, BGR2RGB = False):
-
+def show_multi_images(img_list_src, col_max_len, filter = None):
+    img_list = copy.deepcopy(img_list_src)
     for k, img in enumerate(img_list):
         #r = (k%max_len) + 1
         row_len = int(k / col_max_len) + 1
-        if BGR2RGB:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if filter:
+            img = cv2.cvtColor(img, filter)
         plt.subplot(row_len, col_max_len, k+1), plt.imshow(img)
 
-    # imgplot = plt.imshow(img,)
     plt.show()
 
+def get_harris_corners(img_src, blocksize, ksize, k, threshold_apha, dilate_corners=False):
+    img = copy.deepcopy(img_src)
 
-def get_harris_corners(img, blocksize, ksize, k, threshold_apha, dilate_corners=False):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = np.float32(gray)
 
@@ -78,15 +77,14 @@ def get_harris_corners(img, blocksize, ksize, k, threshold_apha, dilate_corners=
     return img, keypoints
 
 
-def get_sift(img):
+def get_sift(img_src):
+    img = copy.deepcopy(img_src)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    sift = cv2.xfeatures2d.SIFT_create()
 
+    sift = cv2.xfeatures2d.SIFT_create()
     kp = sift.detect(gray, None)
     sift_img = cv2.drawKeypoints(gray, kp, img)
-
-    show_images(sift_img)
-
+    return sift_img
 
 def main():
     # get the image path and check if it is all correct
@@ -95,24 +93,38 @@ def main():
         return 1
 
     img_list = get_image_list(img_path_list)
-    show_multi_images(img_list, 3, True)
+    #show_multi_images(img_list, 2, cv2.COLOR_BGR2RGB) #  cv2.COLOR_BGR2RGB
+    [show_image(k) for k in img_list]
 
-    # (1) find harris corners
+    #  (1) find harris corners
     harris_img_list, harris_corners_list = [], []
     for img in img_list:
         harris_img, h_corners_list = get_harris_corners(img, 2, 3, 0.04, 0.01)
         harris_img_list.append(harris_img)
         harris_corners_list.append(h_corners_list)
 
-    show_multi_images(harris_img_list, 3, True)
+    #show_multi_images(harris_img_list, 2)
+    [show_image(k) for k in harris_img_list]
+
     # TODO fai il test per la grandezza del corner harris
 
-    # (2) compute SIFT descriptors from corners
 
+    #  (2) compute SIFT descriptors from corners
+    sift_img_list = []
+    for img in img_list:
+        sift_img = get_sift(img)
+        sift_img_list.append(sift_img)
+    #show_multi_images(sift_img_list, 2)
+    [show_image(k) for k in sift_img_list]
 
-    # (3)
+    # TODO capire se sta scrivendo solo stronzate o meno
 
-    # (4)
+    #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2
+    #  (3a) Normalized correlation
+    #  (3b) Euclidean distance after normalizing each descriptor
+
+    #  (4)Select the best matches based on a threshold or by considering the top few hundred pairs of descriptors.
+    #  (4B) make a sensitivity analysis based on these parameters.
 
     # (5)
 
