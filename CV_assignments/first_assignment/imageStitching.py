@@ -9,7 +9,7 @@ import copy
 # conda install -c menpo opencv
 
 def get_script_variables():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         print("You have to add 2 or more files")
         return []
 
@@ -57,20 +57,20 @@ def show_multi_images(img_list_src, col_max_len, filter = None):
 
     plt.show()
 
-def get_harris_corners(img_src, blocksize, ksize, k, threshold_apha, dilate_corners=False):
+def get_harris_corners(img_src, blocksize, threshold, dilate_corners = False):
     img = copy.deepcopy(img_src)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = np.float32(gray)
 
-    corners = cv2.cornerHarris(gray, blocksize, ksize, k) # 2, 11, 0
+    corners = cv2.cornerHarris(gray, blocksize, 3, 0.04)
 
     #  result is dilated for marking the corners, not important
     if dilate_corners:
         corners = cv2.dilate(corners, None)
 
     # Threshold for an optimal value, it may vary depending on the image.
-    matrix_arg_threshold = corners > threshold_apha * corners.max()
+    matrix_arg_threshold = corners > threshold * corners.max()
     img[matrix_arg_threshold] = [0, 0, 255]
     keypoints = np.argwhere(matrix_arg_threshold)
     keypoints = [cv2.KeyPoint(kp[1], kp[0], 1) for kp in keypoints]
@@ -94,17 +94,17 @@ def main():
 
     img_list = get_image_list(img_path_list)
     #show_multi_images(img_list, 2, cv2.COLOR_BGR2RGB) #  cv2.COLOR_BGR2RGB
-    [show_image(k) for k in img_list]
+    [show_image(k, cv2.COLOR_BGR2RGB) for k in img_list]
 
     #  (1) find harris corners
     harris_img_list, harris_corners_list = [], []
     for img in img_list:
-        harris_img, h_corners_list = get_harris_corners(img, 2, 3, 0.04, 0.01)
+        harris_img, h_corners_list = get_harris_corners(img, 3, 0.01)
         harris_img_list.append(harris_img)
         harris_corners_list.append(h_corners_list)
 
     #show_multi_images(harris_img_list, 2)
-    [show_image(k) for k in harris_img_list]
+    [show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
 
     # TODO fai il test per la grandezza del corner harris
 
