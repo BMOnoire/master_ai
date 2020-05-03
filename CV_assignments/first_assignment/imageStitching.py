@@ -5,11 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage.feature import corner_harris
 import copy
+from skimage.morphology import octagon
+from skimage.feature import (peak_local_max, corner_fast, corner_peaks, corner_orientations)
 
 # conda install -c menpo opencv
 
 def get_script_variables():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print("You have to add 2 or more files")
         return []
 
@@ -57,7 +59,7 @@ def show_multi_images(img_list_src, col_max_len, filter = None):
 
     plt.show()
 
-def get_harris_corners(img_src, blocksize, threshold, dilate_corners = False):
+def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
     img = copy.deepcopy(img_src)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -65,26 +67,69 @@ def get_harris_corners(img_src, blocksize, threshold, dilate_corners = False):
 
     corners = cv2.cornerHarris(gray, blocksize, 3, 0.04)
 
-    #  result is dilated for marking the corners, not important
+    '''
+    result is dilated for marking the corners, not important
+    '''
     if dilate_corners:
         corners = cv2.dilate(corners, None)
 
+    threshold_value = threshold * corners.max()
+
+
+    matrix_min_threshold = corners < threshold_value
+    matrix_max_threshold = corners >= threshold_value
+
+    #asd = copy.deepcopy(img)
+    #asd[matrix_max_threshold] = [0, 0, 255]
+    #show_image(asd, cv2.COLOR_BGR2RGB)
+
+    if custom_threshold_logic:
+        #  put corner matrix values to 0 if less than a threshold
+        corners[matrix_min_threshold] = 0
+        coordinates_local_max = peak_local_max(corners, min_distance = blocksize) # 1
+
+        # update max threshold matrix
+        matrix_max_threshold = np.empty(matrix_max_threshold.shape, dtype=bool)
+        for cord in coordinates_local_max:
+            matrix_max_threshold[cord[0]][cord[1]] = True
+
     # Threshold for an optimal value, it may vary depending on the image.
-    matrix_arg_threshold = corners > threshold * corners.max()
-    img[matrix_arg_threshold] = [0, 0, 255]
-    keypoints = np.argwhere(matrix_arg_threshold)
+    img[matrix_max_threshold] = [0, 0, 255]
+    keypoints = np.argwhere(matrix_max_threshold)
     keypoints = [cv2.KeyPoint(kp[1], kp[0], 1) for kp in keypoints]
     return img, keypoints
 
+def test_harris():
+    images_name = [
+        "images/test1.jpeg",
+        "images/test2.jpeg",
+        "images/img1.png",
+        "images/img2.png"
+    ]
+    range = [1, 2, 3, 5, 10, 15, 20, 30, 50]
 
-def get_sift(img_src):
+    images = get_image_list(images_name)
+    for img in images:
+        for size in range:
+            harris_img, h_corners_list = get_harris_corners(img, size, 0.001, True)
+            show_image(harris_img, cv2.COLOR_BGR2RGB)
+            print("Image [ ", img, " ]: ", len(h_corners_list), "corners")
+
+def get_sift(img_src, harris_keypoints):
     img = copy.deepcopy(img_src)
+    kp = harris_keypoints
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    #sift = cv2.xfeatures2d.SIFT_create()
+    #kp = sift.detect(gray, None)
+    #sift_img = cv2.drawKeypoints(gray, kp, img)
+    #return sift_img
+
     sift = cv2.xfeatures2d.SIFT_create()
-    kp = sift.detect(gray, None)
-    sift_img = cv2.drawKeypoints(gray, kp, img)
-    return sift_img
+    sift_keypoints, sift_descriptors = sift.compute(gray, kp)
+    sift_img = cv2.drawKeypoints(gray, sift_keypoints, img)
+    #print("norm", len(kps), des[0])
+    return sift_img, sift_keypoints, sift_descriptors
 
 def main():
     # get the image path and check if it is all correct
@@ -94,30 +139,34 @@ def main():
 
     img_list = get_image_list(img_path_list)
     #show_multi_images(img_list, 2, cv2.COLOR_BGR2RGB) #  cv2.COLOR_BGR2RGB
-    [show_image(k, cv2.COLOR_BGR2RGB) for k in img_list]
+    # [show_image(k, cv2.COLOR_BGR2RGB) for k in img_list]
 
     #  (1) find harris corners
-    harris_img_list, harris_corners_list = [], []
+    harris_img_list, harris_keypoints_list = [], []
     for img in img_list:
-        harris_img, h_corners_list = get_harris_corners(img, 3, 0.01)
+        harris_img, harris_keypoints = get_harris_corners(img, 3, 0.01, True)
         harris_img_list.append(harris_img)
-        harris_corners_list.append(h_corners_list)
+        harris_keypoints_list.append(harris_keypoints)
 
     #show_multi_images(harris_img_list, 2)
-    [show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
+    #[show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
 
-    # TODO fai il test per la grandezza del corner harris
-
+    # test_harris()
+    # TODO fai il test per la grandezza del corner harris e tira giù le considerazioni
 
     #  (2) compute SIFT descriptors from corners
-    sift_img_list = []
-    for img in img_list:
-        sift_img = get_sift(img)
+    sift_img_list, sift_keypoints_list, sift_descriptors_list = [], [], []
+    for img, kp in zip(img_list, harris_keypoints_list):
+        sift_img, sift_keypoints, sift_descriptors = get_sift(img, kp)
         sift_img_list.append(sift_img)
-    #show_multi_images(sift_img_list, 2)
-    [show_image(k) for k in sift_img_list]
+        sift_keypoints_list.append(sift_keypoints)
+        sift_descriptors_list.append(sift_descriptors)
 
-    # TODO capire se sta scrivendo solo stronzate o meno
+    #show_multi_images(sift_img_list, 2)
+    #[show_image(k) for k in sift_img_list]
+
+    print(sift_keypoints_list[0])
+    print(sift_descriptors_list[0][0])
 
     #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2
     #  (3a) Normalized correlation
