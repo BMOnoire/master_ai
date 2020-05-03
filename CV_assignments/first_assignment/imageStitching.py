@@ -7,8 +7,15 @@ from skimage.feature import corner_harris
 import copy
 from skimage.morphology import octagon
 from skimage.feature import (peak_local_max, corner_fast, corner_peaks, corner_orientations)
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
 
 # conda install -c menpo opencv
+
+HARRIS_WINDOW_SIZE = 3
+MATCH_THRESHOLD = 0.5
+
 
 def get_script_variables():
     if len(sys.argv) < 3:
@@ -41,23 +48,45 @@ def get_image_list(img_path_list, filter = None):
     else:
         return [cv2.cvtColor(cv2.imread(str(path)), filter) for path in img_path_list]
 
-def show_image(img_src, filter = None):
+def show_image(img_src, filter = None, plot = False):
     img = copy.deepcopy(img_src)
-    if filter:
-        img = cv2.cvtColor(img, filter)
-    plt.imshow(img)
-    plt.show()
-
-def show_multi_images(img_list_src, col_max_len, filter = None):
-    img_list = copy.deepcopy(img_list_src)
-    for k, img in enumerate(img_list):
-        #r = (k%max_len) + 1
-        row_len = int(k / col_max_len) + 1
+    if plot:
         if filter:
             img = cv2.cvtColor(img, filter)
-        plt.subplot(row_len, col_max_len, k+1), plt.imshow(img)
+        plt.imshow(img)
+        plt.show()
+    else:
+        cv2.imshow("Image", img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-    plt.show()
+def show_multi_images(img_list_src):
+    img_list = copy.deepcopy(img_list_src)
+
+    # Initiate SIFT detector
+    #sift = cv2.SIFT()
+
+    # find the keypoints and descriptors with SIFT
+    #kp1, des1 = sift.detectAndCompute(img1, None)
+    #kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # BFMatcher with default params
+    #bf = cv2.BFMatcher()
+    #matches = bf.knnMatch(des1, des2, k=2)
+
+    # Apply ratio test
+    #good = []
+    #for m, n in matches:
+    #    if m.distance < 0.75 * n.distance:
+    #        good.append([m])
+
+    # cv2.drawMatchesKnn expects list of lists as matches.
+    #img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, flags=2)
+
+    #plt.imshow(img3), plt.show()
+
+
+
 
 def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
     img = copy.deepcopy(img_src)
@@ -138,18 +167,20 @@ def main():
         return 1
 
     img_list = get_image_list(img_path_list)
+    img_list = [cv2.resize(img, (0, 0), None, .5, .5) for img in img_list]
+    show_multi_images(img_list)
     #show_multi_images(img_list, 2, cv2.COLOR_BGR2RGB) #  cv2.COLOR_BGR2RGB
     # [show_image(k, cv2.COLOR_BGR2RGB) for k in img_list]
 
     #  (1) find harris corners
     harris_img_list, harris_keypoints_list = [], []
     for img in img_list:
-        harris_img, harris_keypoints = get_harris_corners(img, 3, 0.01, True)
+        harris_img, harris_keypoints = get_harris_corners(img, HARRIS_WINDOW_SIZE, 0.01, True)
         harris_img_list.append(harris_img)
         harris_keypoints_list.append(harris_keypoints)
 
     #show_multi_images(harris_img_list, 2)
-    #[show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
+    [show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
 
     # test_harris()
     # TODO fai il test per la grandezza del corner harris e tira giù le considerazioni
@@ -163,10 +194,43 @@ def main():
         sift_descriptors_list.append(sift_descriptors)
 
     #show_multi_images(sift_img_list, 2)
-    #[show_image(k) for k in sift_img_list]
+    [show_image(k) for k in sift_img_list]
 
     print(sift_keypoints_list[0])
     print(sift_descriptors_list[0][0])
+
+    def normal_correlation(dsc1, dsc2):
+        #TODO capire perchè len(desc1)
+        norm_desc_1 = (dsc1 - np.mean(dsc1)) / (np.std(dsc1))
+        norm_desc_2 = (dsc2 - np.mean(dsc2)) / (np.std(dsc2))
+        cc_value = np.correlate(norm_desc_1, norm_desc_2) / len(dsc1)
+        print(cc_value)
+        return cc_value
+
+    matches = []
+    for dsc_a in sift_descriptors_list[0]:
+        for dsc_b in sift_descriptors_list[1]:
+            match_score = normal_correlation(dsc_a, dsc_b)
+            if match_score > MATCH_THRESHOLD:
+                matches.append([dsc_a, dsc_b])
+
+
+
+
+    #img3 = cv2.drawMatches(img_list[0], sift_keypoints[0], img_list[1], sift_keypoints[1], matches[:10], flags=2, outImg=None)
+
+    ## Convert keypoints to cv2.Keypoint object
+    #cv_kp1 = [cv2.KeyPoint(x=pt[0], y=pt[1], _size=1) for pt in sift_keypoints_list[0]]
+    #cv_kp2 = [cv2.KeyPoint(x=pt[0], y=pt[1], _size=1) for pt in sift_keypoints_list[1]]
+#
+    #out_img = np.array([])
+    #good_matches = [cv2.DMatch(_imgIdx=0, _queryIdx=idx, _trainIdx=idx,_distance=0) for idx in matches]
+    #out_img = cv2.drawMatches(img1, cv_kp1, img2, cv_kp2, matches1to2=good_matches, outImg=out_img)
+
+    out_img = np.array([])
+    #good_matches = [cv2.DMatch(_imgIdx=0, _queryIdx=idx, _trainIdx=idx,_distance=0) for idx in range(N)]
+    out_img = cv2.drawMatches(img_list[0], sift_keypoints_list[0], img_list[1], sift_keypoints_list[1], matches1to2=matches, outImg=out_img)
+    plt.imshow(out_img), plt.show()
 
     #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2
     #  (3a) Normalized correlation
