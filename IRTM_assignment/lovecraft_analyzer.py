@@ -5,13 +5,24 @@ from os.path import isfile, join
 import docx2txt
 import re
 
+import numpy as np
+import pandas as pd
+from os import path
+from PIL import Image
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+
+import matplotlib.pyplot as plt
+#% matplotlib inline
+
+
+
 path = Path("./fictions/")
 
 
 def main():
     file_list = [f for f in listdir(path) if isfile(join(path, f))]
 
-    # extract text
+    # EXTRACT TEST
     book_list = []
     for file_name in file_list:
         correct_regex = re.match("\A\((\d*)\)\[(\d*)\] (.*)\.docx\Z",file_name)
@@ -30,5 +41,57 @@ def main():
     def sortLogic(obj):
         return obj["id"]
     book_list.sort(key = sortLogic)
+
+    #WORD CLOUD
+
+    # Start with one review:
+    #text = book_list[5]["text"]#df.description[0]
+    #text = " ".join(review for review in df.description)
+    text = ""
+    for book in book_list:
+        text = text + book["text"]
+    print("There are {} words in the combination of all review.".format(len(text)))
+    # Create and generate a word cloud image:
+    #wordcloud = WordCloud().generate(text)
+    wordcloud = WordCloud(max_words=30, background_color="white").generate(text)
+
+    wordcloud.to_file("img/first_review.png")
+
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.show()
+
+    # Create stopword list:
+    stopwords = set(STOPWORDS)
+    stopwords.update([
+        "wa",
+        "hi",
+        "was",
+        "then",
+        "Then",
+        "seemed",
+        "it",
+        "it wa",
+        "It wa",
+        "whose",
+        "almost",
+        "still",
+        "without",
+        "long",
+        "half"
+    ])
+
+    wordcloud = WordCloud(stopwords=stopwords, max_words=30, background_color="white").generate(text)
+
+    wordcloud.to_file("img/refined_review.png")
+
+    # Display the generated image:
+    #plt.figure()
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.show()
+
+
+
 
 main()
