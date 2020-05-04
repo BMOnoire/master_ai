@@ -42,11 +42,13 @@ def get_script_variables():
 
     return img_path_list
 
+
 def get_image_list(img_path_list, filter = None):
     if filter == None:
         return [cv2.imread(str(path))for path in img_path_list]
     else:
         return [cv2.cvtColor(cv2.imread(str(path)), filter) for path in img_path_list]
+
 
 def show_image(img_src, filter = None, plot = False):
     img = copy.deepcopy(img_src)
@@ -59,6 +61,7 @@ def show_image(img_src, filter = None, plot = False):
         cv2.imshow("Image", img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
 
 def show_multi_images(img_list_src):
     img_list = copy.deepcopy(img_list_src)
@@ -84,8 +87,6 @@ def show_multi_images(img_list_src):
     #img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, flags=2)
 
     #plt.imshow(img3), plt.show()
-
-
 
 
 def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
@@ -128,6 +129,7 @@ def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, di
     keypoints = [cv2.KeyPoint(kp[1], kp[0], 1) for kp in keypoints]
     return img, keypoints
 
+
 def test_harris():
     images_name = [
         "images/test1.jpeg",
@@ -144,6 +146,7 @@ def test_harris():
             show_image(harris_img, cv2.COLOR_BGR2RGB)
             print("Image [ ", img, " ]: ", len(h_corners_list), "corners")
 
+
 def get_sift(img_src, harris_keypoints):
     img = copy.deepcopy(img_src)
     kp = harris_keypoints
@@ -159,6 +162,37 @@ def get_sift(img_src, harris_keypoints):
     sift_img = cv2.drawKeypoints(gray, sift_keypoints, img)
     #print("norm", len(kps), des[0])
     return sift_img, sift_keypoints, sift_descriptors
+
+
+def get_matches_list(descriptors_list, threshold):
+
+    def normal_correlation(dsc1, dsc2):
+        norm_desc_1 = (dsc1 - np.mean(dsc1)) / (np.std(dsc1))
+        norm_desc_2 = (dsc2 - np.mean(dsc2)) / (np.std(dsc2))
+        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(dsc1) - 1)
+        return cc_value
+
+    matches, scores = [], []
+    for dsc_a in descriptors_list[0]:
+        for dsc_b in descriptors_list[1]:
+            match_score = normal_correlation(dsc_a, dsc_b)
+            if match_score > threshold:
+                matches.append([dsc_a, dsc_b])
+                scores.append(match_score)
+
+    distances = []
+    for mtc in matches:
+        dist = np.linalg.norm(mtc[1] - mtc[0])
+        print(dist)
+        distances.append(dist)
+
+    return matches, scores, distances
+
+def test_match_threshold():
+    # TODO
+    pass
+
+
 
 def main():
     # get the image path and check if it is all correct
@@ -196,64 +230,41 @@ def main():
     #show_multi_images(sift_img_list, 2)
     [show_image(k) for k in sift_img_list]
 
-    print(sift_keypoints_list[0])
-    print(sift_descriptors_list[0][0])
-
-    def normal_correlation(dsc1, dsc2):
-        #TODO capire perchè len(desc1)
-        norm_desc_1 = (dsc1 - np.mean(dsc1)) / (np.std(dsc1))
-        norm_desc_2 = (dsc2 - np.mean(dsc2)) / (np.std(dsc2))
-        cc_value = np.correlate(norm_desc_1, norm_desc_2) / len(dsc1)
-        print(cc_value)
-        return cc_value
-
-    matches = []
-    for dsc_a in sift_descriptors_list[0]:
-        for dsc_b in sift_descriptors_list[1]:
-            match_score = normal_correlation(dsc_a, dsc_b)
-            if match_score > MATCH_THRESHOLD:
-                matches.append([dsc_a, dsc_b])
-
-
-
-
-    #img3 = cv2.drawMatches(img_list[0], sift_keypoints[0], img_list[1], sift_keypoints[1], matches[:10], flags=2, outImg=None)
-
-    ## Convert keypoints to cv2.Keypoint object
-    #cv_kp1 = [cv2.KeyPoint(x=pt[0], y=pt[1], _size=1) for pt in sift_keypoints_list[0]]
-    #cv_kp2 = [cv2.KeyPoint(x=pt[0], y=pt[1], _size=1) for pt in sift_keypoints_list[1]]
-#
-    #out_img = np.array([])
-    #good_matches = [cv2.DMatch(_imgIdx=0, _queryIdx=idx, _trainIdx=idx,_distance=0) for idx in matches]
-    #out_img = cv2.drawMatches(img1, cv_kp1, img2, cv_kp2, matches1to2=good_matches, outImg=out_img)
-
-    out_img = np.array([])
-    #good_matches = [cv2.DMatch(_imgIdx=0, _queryIdx=idx, _trainIdx=idx,_distance=0) for idx in range(N)]
-    out_img = cv2.drawMatches(img_list[0], sift_keypoints_list[0], img_list[1], sift_keypoints_list[1], matches1to2=matches, outImg=out_img)
-    plt.imshow(out_img), plt.show()
+    #print(sift_keypoints_list[0])
+    #print(sift_descriptors_list[0][0])
 
     #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2
-    #  (3a) Normalized correlation
-    #  (3b) Euclidean distance after normalizing each descriptor
-
+    #  Normalized correlation and Euclidean distance after normalizing each descriptor
     #  (4)Select the best matches based on a threshold or by considering the top few hundred pairs of descriptors.
-    #  (4B) make a sensitivity analysis based on these parameters.
+    matches_list, matches_scores, matches_distances = get_matches_list(sift_descriptors_list, MATCH_THRESHOLD)
+    print(matches_scores)
 
-    # (5)
+
+    #  (4B) make a sensitivity analysis based on these parameters.
+    test_match_threshold()
+
+    # (5) simple implementation of RANSAC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # (6)
 
     # (7)
 
     return 0
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
