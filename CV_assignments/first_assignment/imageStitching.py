@@ -1,22 +1,18 @@
 import sys
 from pathlib import Path
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage.feature import corner_harris
 import copy
-from skimage.morphology import octagon
-from skimage.feature import (peak_local_max, corner_fast, corner_peaks, corner_orientations)
+from skimage.feature import peak_local_max
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
+import time
 
 # conda install -c menpo opencv
 
 RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
-SHOW_ALL = False
+SHOW_ALL = True
 
 def get_script_variables():
     if len(sys.argv) != 3:
@@ -75,7 +71,6 @@ def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, di
 
     corners = cv2.cornerHarris(gray, blocksize, 3, 0.04)
 
-
     # result is dilated for marking the corners, not important
     if dilate_corners:
         corners = cv2.dilate(corners, None)
@@ -88,10 +83,10 @@ def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, di
     if custom_threshold_logic:
         #  put corner matrix values to 0 if less than a threshold
         corners[matrix_min_threshold] = 0
-        coordinates_local_max = peak_local_max(corners, min_distance = blocksize) # 1
+        coordinates_local_max = peak_local_max(corners, min_distance=blocksize)
 
         # update max threshold matrix
-        matrix_max_threshold = np.empty(matrix_max_threshold.shape, dtype=bool)
+        matrix_max_threshold = np.zeros(matrix_max_threshold.shape, dtype=bool)
         for cord in coordinates_local_max:
             matrix_max_threshold[cord[0]][cord[1]] = True
 
@@ -124,14 +119,8 @@ def get_sift(img_src, harris_keypoints):
     kp = harris_keypoints
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    #sift = cv2.xfeatures2d.SIFT_create()
-    #kp = sift.detect(gray, None)
-    #sift_img = cv2.drawKeypoints(gray, kp, img)
-    #return sift_img
-
     sift = cv2.xfeatures2d.SIFT_create()
     sift_keypoints, sift_descriptors = sift.compute(gray, kp)
-    print(len(sift_descriptors[0]))
     sift_img = cv2.drawKeypoints(gray, sift_keypoints, img)
     #print("norm", len(kps), des[0])
     return sift_img, sift_keypoints, sift_descriptors
@@ -140,43 +129,35 @@ def get_sift(img_src, harris_keypoints):
 ################################################################################
 ################################################################################
 ################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-def matchKeypoints_CANCELLA(kpsA, kpsB, featuresA, featuresB, ratio, reprojThresh):
-    # compute the raw matches and initialize the list of actual
-    # matches
+def get_matches_LOFFIA(keypoints_1, keypoints_2, descriptors_1, descriptors_2, ratio, reprojThresh):
+
     matcher = cv2.DescriptorMatcher_create("BruteForce")
-    rawMatches = matcher.knnMatch(featuresA, featuresB, 2)
+    rawMatches = matcher.knnMatch(descriptors_1, descriptors_2, 2)
     matches = []
 
     # loop over the raw matches
     for m in rawMatches:
-        # ensure the distance is within a certain ratio of each
-        # other (i.e. Lowe's ratio test)
+        # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
         if len(m) == 2 and m[0].distance < m[1].distance * ratio:
             matches.append((m[0].trainIdx, m[0].queryIdx))
 
     # computing a homography requires at least 4 matches
     if len(matches) > 4:
         # construct the two sets of points
-        ptsA = np.float32([kpsA[i] for (_, i) in matches])
-        ptsB = np.float32([kpsB[i] for (i, _) in matches])
+        ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
+        ptsB = np.float32([keypoints_2[i] for (i, _) in matches])
 
         # compute the homography between the two sets of points
-        (H, status) = cv2.findHomography(ptsA, ptsB, cv2.RANSAC,
-                                         reprojThresh)
+        (H, status) = cv2.findHomography(ptsA, ptsB, cv2.RANSAC, reprojThresh)
 
-        # return the matches along with the homograpy matrix
-        # and status of each matched point
-        return (matches, H, status)
+        # return the matches along with the homograpy matrix and status of each matched point
+        return matches, H, status
 
     # otherwise, no homograpy could be computed
-    return None
+    return None, None, None
 
 
-def drawMatches_CANCELLA(imageA, imageB, kpsA, kpsB, matches, status):
+def draw_match_lines_LOFFIA(imageA, imageB, kpsA, kpsB, matches, status):
     # initialize the output visualization image
     (hA, wA) = imageA.shape[:2]
     (hB, wB) = imageB.shape[:2]
@@ -186,8 +167,7 @@ def drawMatches_CANCELLA(imageA, imageB, kpsA, kpsB, matches, status):
 
     # loop over the matches
     for ((trainIdx, queryIdx), s) in zip(matches, status):
-        # only process the match if the keypoint was successfully
-        # matched
+        # only process the match if the keypoint was successfully matched
         if s == 1:
             # draw the match
             ptA = (int(kpsA[queryIdx][0]), int(kpsA[queryIdx][1]))
@@ -196,9 +176,6 @@ def drawMatches_CANCELLA(imageA, imageB, kpsA, kpsB, matches, status):
 
     # return the visualization
     return vis
-################################################################################
-################################################################################
-################################################################################
 ################################################################################
 ################################################################################
 ################################################################################
@@ -265,6 +242,7 @@ def main():
     harris_img_2, harris_keypoints_2 = get_harris_corners(img_2, HARRIS_WINDOW_SIZE, 0.01, True)
 
     if SHOW_ALL:
+        #TODO check sometimes the images are wrong but all works fine
         show_image(harris_img_1, cv2.COLOR_BGR2RGB)
         show_image(harris_img_2, cv2.COLOR_BGR2RGB)
 
@@ -272,39 +250,40 @@ def main():
     sift_img_2, sift_keypoints_2, sift_descriptors_2 = get_sift(img_2, harris_keypoints_2)
 
     if SHOW_ALL:
-        show_image(sift_img_1, cv2.COLOR_BGR2RGB)
+        show_image(sift_img_1)
         show_image(sift_img_2, cv2.COLOR_BGR2RGB)
 
+    # TODO rivedere da qua
     #matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
-    # TODO rivedere tutto
+
+
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
     ratio = 0.75
     reprojThresh = 4.0
-    matches = matchKeypoints_CANCELLA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
 
-    # if the match is None, then there aren't enough matched kpoints to create a panorama
-    if matches is None:
-        print("BLEAH")
+    matches, transformation_matrix, status = get_matches_LOFFIA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
+    if status is None:
         return 1
 
-    # otherwise, apply a perspective warp to stitch the images together
-    (matches, H, status) = matches
-    result = cv2.warpPerspective(img_1, H, (img_1.shape[1] + img_2.shape[1], img_1.shape[0]))
-    result[0:img_2.shape[0], 0:img_2.shape[1]] = img_2
+    vis = draw_match_lines_LOFFIA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
-    # check to see if the keypoint matches should be visualized
-
-    vis = drawMatches_CANCELLA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
-
-    # return a tuple of the stitched image and the visualization
-
+    height_1, width_1 = img_1.shape[0], img_1.shape[1]
+    height_2, width_2 = img_2.shape[0], img_2.shape[1]
     cv2.imshow("IMAGE 1", img_1)
     cv2.imshow("IMAGE 2", img_2)
-    cv2.imshow("SHOW MATCHES", vis)
-    cv2.imshow("STITCHING RESULT", result)
-    cv2.waitKey(0)
 
+    new_size = (width_1 + width_2, height_1)
+    result = cv2.warpPerspective(img_2, transformation_matrix, new_size)
+    cv2.imshow("STITCHING RESULT", result)
+    result[0:height_2, 0:width_2] = img_2
+    #cv2.imshow("STITCHING RESULT", result)
+    # check to see if the keypoint matches should be visualized
+
+    #cv2.imshow("SHOW MATCHES", vis)
+
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     return 0
 
 
