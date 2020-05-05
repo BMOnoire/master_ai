@@ -1,23 +1,25 @@
 import os
+import nltk
+import nltk.corpus
+import numpy as np
+import pandas as pd
+from PIL import Image
+
 from pathlib import Path
 from os import listdir
 from os.path import isfile, join
 import docx2txt
 import re
-
-import numpy as np
-import pandas as pd
 from os import path
-from PIL import Image
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-
+from nltk.tokenize import word_tokenize, blankline_tokenize
+from nltk.util import bigrams, trigrams, ngrams
+from nltk.probability import FreqDist
 import matplotlib.pyplot as plt
-#% matplotlib inline
-
+import time
 
 
 path = Path("./fictions/")
-
 
 def main():
     file_list = [f for f in listdir(path) if isfile(join(path, f))]
@@ -30,17 +32,53 @@ def main():
             print(file_name, " is not loaded (regex problem)")
             return 1
 
+        text = docx2txt.process(path / file_name)
+
         book = {
             "id"    : int(correct_regex.group(1)),
             "year"  : int(correct_regex.group(2)),
             "title" : correct_regex.group(3),
-            "text"  : docx2txt.process(path / file_name)
+            "text"  : text
         }
         book_list.append(book)
 
+
+    #ORDER DOCUMENTS
     def sortLogic(obj):
         return obj["id"]
     book_list.sort(key = sortLogic)
+
+
+
+    # PREPROCESS TEXT
+
+    # tokenization
+    def preprocess_text(text):
+        paragraphs = blankline_tokenize(text)
+        tokens = word_tokenize(text)
+        bigrams = list(nltk.bigrams(tokens))
+        fdist = FreqDist(word.lower() for word in tokens)
+        token_frequency = fdist.items()
+
+
+        time.sleep(500)
+
+
+    preprocess_text(book_list[0]["text"])
+
+
+
+    for book in book_list:
+        token = word_tokenize(book["text"])
+        book["token"] = token
+
+
+
+
+
+
+
+
 
     #WORD CLOUD
 
