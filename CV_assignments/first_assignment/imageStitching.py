@@ -13,6 +13,7 @@ from matplotlib import pyplot as plt
 
 # conda install -c menpo opencv
 
+RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
 SHOW_ALL = False
@@ -136,7 +137,6 @@ def get_sift(img_src, harris_keypoints):
     return sift_img, sift_keypoints, sift_descriptors
 
 
-
 ################################################################################
 ################################################################################
 ################################################################################
@@ -196,26 +196,12 @@ def drawMatches_CANCELLA(imageA, imageB, kpsA, kpsB, matches, status):
 
     # return the visualization
     return vis
-
-
-
-
 ################################################################################
 ################################################################################
 ################################################################################
 ################################################################################
 ################################################################################
 ################################################################################
-
-
-
-
-
-
-
-
-
-
 
 
 def get_matches(desc_list_1, desc_list_2, threshold):
@@ -272,28 +258,16 @@ def main():
         return 1
 
     img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
-
-    img_1, img_2 = cv2.resize(img_1, (0, 0), None, .5, .5), cv2.resize(img_2, (0, 0), None, .5, .5)
-
-    #  (1A) find harris corners
-    harris_img_list, harris_keypoints_list = [], []
+    if RESIZE != 0:
+        img_1, img_2 = cv2.resize(img_1, (0, 0), None, RESIZE, RESIZE), cv2.resize(img_2, (0, 0), None, RESIZE, RESIZE)
 
     harris_img_1, harris_keypoints_1 = get_harris_corners(img_1, HARRIS_WINDOW_SIZE, 0.01, True)
     harris_img_2, harris_keypoints_2 = get_harris_corners(img_2, HARRIS_WINDOW_SIZE, 0.01, True)
-
-    #print(len(harris_keypoints_1))
-    #print(len(harris_keypoints_2))
 
     if SHOW_ALL:
         show_image(harris_img_1, cv2.COLOR_BGR2RGB)
         show_image(harris_img_2, cv2.COLOR_BGR2RGB)
 
-    #  (1B) test thresholds for harris corners
-    # TODO fai il test per la grandezza del corner harris e tira giù le considerazioni
-    # test_harris()
-
-
-    #  (2) compute SIFT descriptors from corners
     sift_img_1, sift_keypoints_1, sift_descriptors_1 = get_sift(img_1, harris_keypoints_1)
     sift_img_2, sift_keypoints_2, sift_descriptors_2 = get_sift(img_2, harris_keypoints_2)
 
@@ -301,17 +275,13 @@ def main():
         show_image(sift_img_1, cv2.COLOR_BGR2RGB)
         show_image(sift_img_2, cv2.COLOR_BGR2RGB)
 
-
-    #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2  (mormalized correlation and Euclidean distance)
-
     #matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
     # TODO rivedere tutto
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
     ratio = 0.75
     reprojThresh = 4.0
-    matches = matchKeypoints_CANCELLA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2,
-                                ratio, reprojThresh)
+    matches = matchKeypoints_CANCELLA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
 
     # if the match is None, then there aren't enough matched kpoints to create a panorama
     if matches is None:
@@ -327,8 +297,7 @@ def main():
 
     vis = drawMatches_CANCELLA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
-    # return a tuple of the stitched image and the
-    # visualization
+    # return a tuple of the stitched image and the visualization
 
     cv2.imshow("IMAGE 1", img_1)
     cv2.imshow("IMAGE 2", img_2)
@@ -336,12 +305,6 @@ def main():
     cv2.imshow("STITCHING RESULT", result)
     cv2.waitKey(0)
 
-    #  (4A) select the best matches based on a threshold or by considering the top few hundred pairs of descriptors.
-    #  (4B) make a sensitivity analysis based on these parameters.
-    test_match_threshold()
-    # (5) simple implementation of RANSAC
-    # (6)
-    # (7)
     return 0
 
 
