@@ -18,41 +18,44 @@ MATCH_THRESHOLD = 0.5
 
 
 def get_script_variables():
-    if len(sys.argv) < 3:
-        print("You have to add 2 or more files")
-        return []
+    if len(sys.argv) != 3:
+        print("You have to add 2 images")
+        return None, None
 
-    argv = sys.argv[1:]
+    arg1, arg2 = sys.argv[1], sys.argv[2]
 
-    img_path_list = []
-    for arg in argv:
+    def check_arg(arg):
         if arg[0] != "-":
             print("Invalid command [", arg, "] you have to put [-] before the file path")
-            return []
+            return None
         path = Path("./" + arg[1:])
-
         if not path.exists():
             print("The file [", path, "] does not exist")
-            return []
+            return None
         if path.suffix.lower() != ".jpg" and path.suffix.lower() != ".jpeg" and path.suffix.lower() != ".png":
             print("The file [", path.name, "] has a wrong extension")
-            return []
+            return None
+        return str(path)
 
-        img_path_list.append(str(path))
+    img1 = check_arg(arg1)
+    img2 = check_arg(arg2)
 
-    return img_path_list
+    if img1 == None or img2== None:
+        return None, None
+
+    return img1, img2
 
 
-def get_image_list(img_path_list, filter = None):
+def get_image(img_path, filter = None):
     if filter == None:
-        return [cv2.imread(str(path))for path in img_path_list]
+        return cv2.imread(img_path)
     else:
-        return [cv2.cvtColor(cv2.imread(str(path)), filter) for path in img_path_list]
+        return cv2.cvtColor(cv2.imread(img_path), filter)
 
 
-def show_image(img_src, filter = None, plot = False):
+def show_image(img_src, filter = None, using_plot = False):
     img = copy.deepcopy(img_src)
-    if plot:
+    if using_plot:
         if filter:
             img = cv2.cvtColor(img, filter)
         plt.imshow(img)
@@ -63,32 +66,6 @@ def show_image(img_src, filter = None, plot = False):
         cv2.destroyAllWindows()
 
 
-def show_multi_images(img_list_src):
-    img_list = copy.deepcopy(img_list_src)
-
-    # Initiate SIFT detector
-    #sift = cv2.SIFT()
-
-    # find the keypoints and descriptors with SIFT
-    #kp1, des1 = sift.detectAndCompute(img1, None)
-    #kp2, des2 = sift.detectAndCompute(img2, None)
-
-    # BFMatcher with default params
-    #bf = cv2.BFMatcher()
-    #matches = bf.knnMatch(des1, des2, k=2)
-
-    # Apply ratio test
-    #good = []
-    #for m, n in matches:
-    #    if m.distance < 0.75 * n.distance:
-    #        good.append([m])
-
-    # cv2.drawMatchesKnn expects list of lists as matches.
-    #img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, flags=2)
-
-    #plt.imshow(img3), plt.show()
-
-
 def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
     img = copy.deepcopy(img_src)
 
@@ -97,21 +74,15 @@ def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, di
 
     corners = cv2.cornerHarris(gray, blocksize, 3, 0.04)
 
-    '''
-    result is dilated for marking the corners, not important
-    '''
+
+    # result is dilated for marking the corners, not important
     if dilate_corners:
         corners = cv2.dilate(corners, None)
 
     threshold_value = threshold * corners.max()
 
-
     matrix_min_threshold = corners < threshold_value
     matrix_max_threshold = corners >= threshold_value
-
-    #asd = copy.deepcopy(img)
-    #asd[matrix_max_threshold] = [0, 0, 255]
-    #show_image(asd, cv2.COLOR_BGR2RGB)
 
     if custom_threshold_logic:
         #  put corner matrix values to 0 if less than a threshold
@@ -139,8 +110,8 @@ def test_harris():
     ]
     range = [1, 2, 3, 5, 10, 15, 20, 30, 50]
 
-    images = get_image_list(images_name)
-    for img in images:
+    for img in images_name:
+        img = get_image(img)
         for size in range:
             harris_img, h_corners_list = get_harris_corners(img, size, 0.001, True)
             show_image(harris_img, cv2.COLOR_BGR2RGB)
@@ -164,29 +135,45 @@ def get_sift(img_src, harris_keypoints):
     return sift_img, sift_keypoints, sift_descriptors
 
 
-def get_matches_list(descriptors_list, threshold):
+def get_matches(desc_list_1, desc_list_2, threshold):
 
-    def normal_correlation(dsc1, dsc2):
-        norm_desc_1 = (dsc1 - np.mean(dsc1)) / (np.std(dsc1))
-        norm_desc_2 = (dsc2 - np.mean(dsc2)) / (np.std(dsc2))
-        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(dsc1) - 1)
-        return cc_value
+    def normal_correlation(desc1, desc2):
+        norm_desc_1 = (desc1 - np.mean(desc1)) / np.std(desc1)
+        norm_desc_2 = (desc2 - np.mean(desc2)) / np.std(desc2)
+        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(desc1) - 1)
+        if cc_value[0] > 1 or cc_value[0] < -1:
+            asd = 1
+        return cc_value[0]
 
-    matches, scores = [], []
-    for dsc_a in descriptors_list[0]:
-        for dsc_b in descriptors_list[1]:
-            match_score = normal_correlation(dsc_a, dsc_b)
-            if match_score > threshold:
-                matches.append([dsc_a, dsc_b])
-                scores.append(match_score)
+    matches = []
+    id = 1
+    for index_1, desc_1 in enumerate(desc_list_1):
+        best_score = -2
+        distance = None
+        for index_2, desc_2 in enumerate(desc_list_2):
 
-    distances = []
-    for mtc in matches:
-        dist = np.linalg.norm(mtc[1] - mtc[0])
-        print(dist)
-        distances.append(dist)
+            next_score = normal_correlation(desc_1, desc_2)
 
-    return matches, scores, distances
+
+            if next_score >= best_score:
+                best_score = next_score
+                distance = np.linalg.norm(desc_2 - desc_1)
+
+        if best_score >= threshold:
+
+
+            match = {
+                "id": id,
+                "index_1": index_1,
+                "index_2": index_2,
+                "score": best_score,
+                "distance": distance
+            }
+            matches.append(match)
+            id = id + 1
+
+    return matches
+
 
 def test_match_threshold():
     # TODO
@@ -196,49 +183,49 @@ def test_match_threshold():
 
 def main():
     # get the image path and check if it is all correct
-    img_path_list = get_script_variables()
-    if img_path_list == []:
+    img_path_1, img_path_2 = get_script_variables()
+
+    if img_path_1 == None or img_path_2 == None:
         return 1
 
-    img_list = get_image_list(img_path_list)
-    img_list = [cv2.resize(img, (0, 0), None, .5, .5) for img in img_list]
-    show_multi_images(img_list)
-    #show_multi_images(img_list, 2, cv2.COLOR_BGR2RGB) #  cv2.COLOR_BGR2RGB
-    # [show_image(k, cv2.COLOR_BGR2RGB) for k in img_list]
+    img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
 
-    #  (1) find harris corners
+    img_1, img_2 = cv2.resize(img_1, (0, 0), None, .5, .5), cv2.resize(img_2, (0, 0), None, .5, .5)
+
+    show_image(img_1, cv2.COLOR_BGR2RGB)
+    show_image(img_2, cv2.COLOR_BGR2RGB)
+
+    #  (1A) find harris corners
     harris_img_list, harris_keypoints_list = [], []
-    for img in img_list:
-        harris_img, harris_keypoints = get_harris_corners(img, HARRIS_WINDOW_SIZE, 0.01, True)
-        harris_img_list.append(harris_img)
-        harris_keypoints_list.append(harris_keypoints)
 
-    #show_multi_images(harris_img_list, 2)
-    [show_image(k, cv2.COLOR_BGR2RGB) for k in harris_img_list]
+    harris_img_1, harris_keypoints_1 = get_harris_corners(img_1, HARRIS_WINDOW_SIZE, 0.01, True)
+    harris_img_2, harris_keypoints_2 = get_harris_corners(img_2, HARRIS_WINDOW_SIZE, 0.01, True)
 
-    # test_harris()
+    #print(len(harris_keypoints_1))
+    #print(len(harris_keypoints_2))
+
+    show_image(harris_img_1, cv2.COLOR_BGR2RGB)
+    show_image(harris_img_2, cv2.COLOR_BGR2RGB)
+
+    #  (1B) test thresholds for harris corners
     # TODO fai il test per la grandezza del corner harris e tira giù le considerazioni
+    # test_harris()
+
 
     #  (2) compute SIFT descriptors from corners
-    sift_img_list, sift_keypoints_list, sift_descriptors_list = [], [], []
-    for img, kp in zip(img_list, harris_keypoints_list):
-        sift_img, sift_keypoints, sift_descriptors = get_sift(img, kp)
-        sift_img_list.append(sift_img)
-        sift_keypoints_list.append(sift_keypoints)
-        sift_descriptors_list.append(sift_descriptors)
+    sift_img_1, sift_keypoints_1, sift_descriptors_1 = get_sift(img_1, harris_keypoints_1)
+    sift_img_2, sift_keypoints_2, sift_descriptors_2 = get_sift(img_2, harris_keypoints_2)
 
-    #show_multi_images(sift_img_list, 2)
-    [show_image(k) for k in sift_img_list]
+    show_image(sift_img_1, cv2.COLOR_BGR2RGB)
+    show_image(sift_img_2, cv2.COLOR_BGR2RGB)
 
-    #print(sift_keypoints_list[0])
-    #print(sift_descriptors_list[0][0])
 
-    #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2
-    #  Normalized correlation and Euclidean distance after normalizing each descriptor
-    #  (4)Select the best matches based on a threshold or by considering the top few hundred pairs of descriptors.
-    matches_list, matches_scores, matches_distances = get_matches_list(sift_descriptors_list, MATCH_THRESHOLD)
-    print(matches_scores)
+    #  (3) compute the distances between every descriptor in image 1 with every descriptor in image 2  (mormalized correlation and Euclidean distance)
 
+    matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+
+
+    #  (4A) select the best matches based on a threshold or by considering the top few hundred pairs of descriptors.
 
     #  (4B) make a sensitivity analysis based on these parameters.
     test_match_threshold()
@@ -247,23 +234,8 @@ def main():
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     # (6)
-
     # (7)
-
     return 0
 
 
