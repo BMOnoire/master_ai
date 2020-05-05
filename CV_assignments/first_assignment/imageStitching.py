@@ -12,7 +12,7 @@ import time
 RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
-SHOW_ALL = True
+SHOW_ALL = False
 
 def get_script_variables():
     if len(sys.argv) != 3:
@@ -131,47 +131,50 @@ def get_sift(img_src, harris_keypoints):
 ################################################################################
 def get_matches_LOFFIA(keypoints_1, keypoints_2, descriptors_1, descriptors_2, ratio, reprojThresh):
 
+    #TODO CHANGE THIS
     matcher = cv2.DescriptorMatcher_create("BruteForce")
     rawMatches = matcher.knnMatch(descriptors_1, descriptors_2, 2)
-    matches = []
 
-    # loop over the raw matches
+
+    matches = []
+    # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
     for m in rawMatches:
-        # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
         if len(m) == 2 and m[0].distance < m[1].distance * ratio:
             matches.append((m[0].trainIdx, m[0].queryIdx))
 
     # computing a homography requires at least 4 matches
-    if len(matches) > 4:
-        # construct the two sets of points
-        ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
-        ptsB = np.float32([keypoints_2[i] for (i, _) in matches])
+    if len(matches) < 4:
+        return None, None, None
 
-        # compute the homography between the two sets of points
-        (H, status) = cv2.findHomography(ptsA, ptsB, cv2.RANSAC, reprojThresh)
+    # construct the two sets of points
+    ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
+    ptsB = np.float32([keypoints_2[i] for (i, _) in matches])
 
-        # return the matches along with the homograpy matrix and status of each matched point
-        return matches, H, status
+    # compute the homography between the two sets of points
+    matrix_H, status = cv2.findHomography( ptsB,ptsA, cv2.RANSAC, reprojThresh)
 
-    # otherwise, no homograpy could be computed
-    return None, None, None
+    # return the matches along with the homograpy matrix and status of each matched point
+    return matches, matrix_H, status
 
 
-def draw_match_lines_LOFFIA(imageA, imageB, kpsA, kpsB, matches, status):
+
+def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, status):
     # initialize the output visualization image
-    (hA, wA) = imageA.shape[:2]
-    (hB, wB) = imageB.shape[:2]
-    vis = np.zeros((max(hA, hB), wA + wB, 3), dtype="uint8")
-    vis[0:hA, 0:wA] = imageA
-    vis[0:hB, wA:] = imageB
+    h_1, w_1 = img_1.shape[0], img_1.shape[1]
+    h_2, w_2 = img_2.shape[0], img_2.shape[1]
+
+    vis = np.zeros((max(h_1, h_2), w_1 + w_2, 3), dtype="uint8")
+
+    vis[0:h_1, 0:w_1] = img_1
+    vis[0:h_2, w_2:]  = img_2
 
     # loop over the matches
     for ((trainIdx, queryIdx), s) in zip(matches, status):
         # only process the match if the keypoint was successfully matched
         if s == 1:
             # draw the match
-            ptA = (int(kpsA[queryIdx][0]), int(kpsA[queryIdx][1]))
-            ptB = (int(kpsB[trainIdx][0]) + wA, int(kpsB[trainIdx][1]))
+            ptA = (int(keypoints_1[queryIdx][0]), int(keypoints_1[queryIdx][1]))
+            ptB = (int(keypoints_2[trainIdx][0]) + w_1, int(keypoints_2[trainIdx][1]))
             cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
 
     # return the visualization
@@ -275,9 +278,11 @@ def main():
 
     new_size = (width_1 + width_2, height_1)
     result = cv2.warpPerspective(img_2, transformation_matrix, new_size)
+
     cv2.imshow("STITCHING RESULT", result)
-    result[0:height_2, 0:width_2] = img_2
-    #cv2.imshow("STITCHING RESULT", result)
+    result[0:height_1, 0:width_1] = img_1
+    cv2.imshow("STITCHING RESULT", result)
+
     # check to see if the keypoint matches should be visualized
 
     #cv2.imshow("SHOW MATCHES", vis)
