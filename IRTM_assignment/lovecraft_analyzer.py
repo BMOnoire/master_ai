@@ -92,20 +92,19 @@ def tokenize_sentence(book):
         bigram_list.append(bigrams)
         trigram_list.append(trigrams)
 
-    fdist = FreqDist(word.lower() for word in tokens)
-    token_frequency = list(fdist.items())
+    fdist = FreqDist(word.lower() for word in word_tokenize(book["text"]))
+    all_token_frequency = list(fdist.items())
 
     book["token_list"] = token_list
     book["bigram_list"] = bigram_list
     book["trigram_list"] = trigram_list
-    book["token_frequency"] = token_frequency
+    book["token_frequency"] = all_token_frequency
 
 
 def main():
     start_time = time.time()
 
     book_list = []
-
     if not create_dir(str(data_path)):
         return 1
 
@@ -130,72 +129,83 @@ def main():
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     #WORD CLOUD
-
-    # Start with one review:
-    #text = book_list[5]["text"]#df.description[0]
-    #text = " ".join(review for review in df.description)
-    text = ""
+    all_text = ""
     for book in book_list:
-        text = text + book["text"]
-    print("There are {} words in the combination of all review.".format(len(text)))
+        all_text = all_text + book["text"]
+    print("There are {} words in the combination of all review.".format(len(all_text)))
+
     # Create and generate a word cloud image:
     #wordcloud = WordCloud().generate(text)
-    wordcloud = WordCloud(max_words=30, background_color="white").generate(text)
+    #wordcloud = WordCloud(max_words=30, background_color="white", collocations=False).generate(text)
 
-    wordcloud.to_file("img/first_review.png")
+    #wordcloud.to_file("img/first_review.png")
 
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
-    plt.show()
+    #plt.imshow(wordcloud, interpolation='bilinear')
+    #plt.axis("off")
+    #plt.show()
 
     # Create stopword list:
     stopwords = set(STOPWORDS)
     stopwords.update([
-        "wa",
         "hi",
         "was",
         "then",
         "Then",
         "seemed",
         "it",
-        "it wa",
-        "It wa",
+        "wa",
         "whose",
         "almost",
         "still",
         "without",
         "long",
-        "half"
+        "half",
+        "day",
+        "must",
+        "thought",
+        "came",
+        "much",
+        "now",
+        "found",
+        "made",
+        "year",
+        "men",
+        "many",
+        "saw",
+        "even",
+        "certain",
+        "thought",
+        "upon",
+        "first",
+        "heard",
+        "see",
+        "know",
+        "seen",
+        "come",
+        "might",
+        "new",
+        "last",
+        "Street",
+        "knew",
+        "way",
+        "tell",
+        "Told",
+        " told",
+        "told",
+        "told "
+        "yet",
+        "say",
+        "said",
+        "never",
+        "two",
+        "well",
+        "light",
+        "will",
+        "little"
     ])
 
-    wordcloud = WordCloud(stopwords=stopwords, max_words=30, background_color="white").generate(text)
+    wordcloud = WordCloud(stopwords=stopwords, max_words=50, background_color="white", collocations=False).generate(all_text)
 
     wordcloud.to_file("img/refined_review.png")
 
@@ -204,8 +214,6 @@ def main():
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
     plt.show()
-
-
 
 
 main()
