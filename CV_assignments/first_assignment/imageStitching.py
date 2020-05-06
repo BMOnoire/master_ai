@@ -5,7 +5,6 @@ from skimage.feature import peak_local_max
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
-import time
 
 # conda install -c menpo opencv
 
@@ -127,6 +126,7 @@ def match_euclidean_distance(des1, des2, threshold):
     print(len(matches))
     return matches
 
+
 def match_correlation(des1, des2, threshold):
     matches=[]
     for idx1, match1 in enumerate(des1):
@@ -137,45 +137,6 @@ def match_correlation(des1, des2, threshold):
                 matches.append((idx2, idx1,c))
 
     return matches
-
-def get_matches_OLD(desc_list_1, desc_list_2, threshold):
-
-    def normal_correlation(desc1, desc2):
-        norm_desc_1 = (desc1 - np.mean(desc1)) / np.std(desc1)
-        norm_desc_2 = (desc2 - np.mean(desc2)) / np.std(desc2)
-        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(desc1) - 1)
-        if cc_value[0] > 1 or cc_value[0] < -1:
-            asd = 1
-        return cc_value[0]
-
-    matches = []
-    id = 1
-    for index_1, desc_1 in enumerate(desc_list_1):
-        best_score = -2
-        distance = None
-        for index_2, desc_2 in enumerate(desc_list_2):
-
-            next_score = normal_correlation(desc_1, desc_2)
-
-
-            if next_score >= best_score:
-                best_score = next_score
-                distance = np.linalg.norm(desc_2 - desc_1)
-
-        if best_score >= threshold:
-
-            match = {
-                "id": id,
-                "index_1": index_1,
-                "index_2": index_2,
-                "score": best_score,
-                "distance": distance
-            }
-            matches.append(match)
-            id = id + 1
-
-    return matches
-
 
 
 def get_matches(desc_1, desc_2, threshold_ratio):
@@ -236,9 +197,12 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
 
     # return the visualization
     return vis
+
+
 ################################################################################
 ################################################################################
 ################################################################################
+
 
 def image_stitcher(img_path_1, img_path_2):
 
@@ -275,7 +239,6 @@ def image_stitcher(img_path_1, img_path_2):
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
     height_2, width_2 = img_2.shape[0], img_2.shape[1]
 
-
     new_size = (width_1 + width_2, height_1)
     result = cv2.warpPerspective(img_2, transformation_matrix, new_size)
     result[0:height_1, 0:width_1] = img_1
@@ -308,6 +271,7 @@ def main():
     if img_path_1 == None or img_path_2 == None:
         return 1
     return image_stitcher(img_path_1, img_path_2)
+
 
 if __name__ == "__main__":
     main()
