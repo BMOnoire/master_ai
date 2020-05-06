@@ -12,22 +12,36 @@ import docx2txt
 import re
 from os import path
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-from nltk.tokenize import word_tokenize, blankline_tokenize
+from nltk.tokenize import word_tokenize, blankline_tokenize, sent_tokenize
 from nltk.util import bigrams, trigrams, ngrams
 from nltk.probability import FreqDist
 import matplotlib.pyplot as plt
 import time
+import pickle
 
 
-path = Path("./fictions/")
+fictions_path = Path("./fictions/")
+data_path = Path("./data/")
 
-def main():
+def create_dir(path):
+    if os.path.exists(path):
+        print("Directory %s exists" % path)
+        return True
+    try:
+        os.mkdir(path)
+    except OSError:
+        print("Creation of the directory %s failed" % path)
+        return False
+    else:
+        print("Successfully created the directory %s " % path)
+        return True
+
+
+def extract_books(path):
     file_list = [f for f in listdir(path) if isfile(join(path, f))]
-
-    # EXTRACT TEST
-    book_list = []
+    list = []
     for file_name in file_list:
-        correct_regex = re.match("\A\((\d*)\)\[(\d*)\] (.*)\.docx\Z",file_name)
+        correct_regex = re.match("\A\((\d*)\)\[(\d*)\] (.*)\.docx\Z", file_name)
         if not correct_regex:
             print(file_name, " is not loaded (regex problem)")
             return 1
@@ -35,42 +49,104 @@ def main():
         text = docx2txt.process(path / file_name)
 
         book = {
-            "id"    : int(correct_regex.group(1)),
-            "year"  : int(correct_regex.group(2)),
-            "title" : correct_regex.group(3),
-            "text"  : text
+            "id": int(correct_regex.group(1)),
+            "year": int(correct_regex.group(2)),
+            "title": correct_regex.group(3),
+            "text": text
         }
-        book_list.append(book)
+        list.append(book)
 
-
-    #ORDER DOCUMENTS
+    # ORDER DOCUMENTS
     def sortLogic(obj):
         return obj["id"]
-    book_list.sort(key = sortLogic)
+
+    list.sort(key=sortLogic)
+
+    return list
 
 
+def split_paragraphs_and_sentences(book):
+        text = book["text"]
+        indx = text.find("Lovecraft") + len("Lovecraft")
+        eol = True
+        while eol:
+            if text[indx] != "\n" and text[indx] != " ":
+                eol = False
+            else:
+                indx += 1
+        text = text[indx:]
+        book["text"] = text
+        book["paragraphs"] = blankline_tokenize(text)
+        book["sentences"] = sent_tokenize(text)
 
-    # PREPROCESS TEXT
 
-    # tokenization
-    def preprocess_text(text):
-        paragraphs = blankline_tokenize(text)
-        tokens = word_tokenize(text)
+def tokenize_sentence(book):
+    # TODO check 48 -611 bigrams
+
+    token_list, bigram_list, trigram_list = [], [], []
+    for i, sntc in enumerate(book["sentences"]):
+        tokens = word_tokenize(sntc)
         bigrams = list(nltk.bigrams(tokens))
-        fdist = FreqDist(word.lower() for word in tokens)
-        token_frequency = fdist.items()
+        trigrams = list(nltk.trigrams(tokens))
+        token_list.append(tokens)
+        bigram_list.append(bigrams)
+        trigram_list.append(trigrams)
+
+    fdist = FreqDist(word.lower() for word in tokens)
+    token_frequency = list(fdist.items())
+
+    book["token_list"] = token_list
+    book["bigram_list"] = bigram_list
+    book["trigram_list"] = trigram_list
+    book["token_frequency"] = token_frequency
 
 
-        time.sleep(500)
+def main():
+    start_time = time.time()
+
+    book_list = []
+
+    if not create_dir(str(data_path)):
+        return 1
+
+    pickle_path = data_path / "book_list.pickle"
+
+    if pickle_path.exists():
+        pickle_in = open(str(pickle_path), "rb")
+        book_list = pickle.load(pickle_in)
+    else:
+        book_list = extract_books(fictions_path)
+
+        for book in book_list:
+            split_paragraphs_and_sentences(book)
+
+        for book in book_list:
+            tokenize_sentence(book)
+
+        pickle_out = open(str(pickle_path), "wb")
+        pickle.dump(book_list, pickle_out)
+        pickle_out.close()
+
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
-    preprocess_text(book_list[0]["text"])
 
 
 
-    for book in book_list:
-        token = word_tokenize(book["text"])
-        book["token"] = token
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
