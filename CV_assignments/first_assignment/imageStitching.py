@@ -206,34 +206,42 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
 
 def image_stitcher(img_path_1, img_path_2):
 
+
+    # GET IMAGES
     img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
     if RESIZE != 0:
         img_1, img_2 = cv2.resize(img_1, (0, 0), None, RESIZE, RESIZE), cv2.resize(img_2, (0, 0), None, RESIZE, RESIZE)
 
+
+    # HARRIS KEYPOINTS
     harris_img_1, harris_keypoints_1 = get_harris_corners(img_1, HARRIS_WINDOW_SIZE, 0.01, True)
     harris_img_2, harris_keypoints_2 = get_harris_corners(img_2, HARRIS_WINDOW_SIZE, 0.01, True)
 
+
+    # SIFT DESCRIPTORS
     sift_img_1, sift_keypoints_1, sift_descriptors_1 = get_sift(img_1, harris_keypoints_1)
     sift_img_2, sift_keypoints_2, sift_descriptors_2 = get_sift(img_2, harris_keypoints_2)
 
 
-    # TODO rivedere da qua
+    # MATCHING TODO rivedere da qua
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
 
     matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
-    #matches = match_correlation(sift_descriptors_1, sift_descriptors_2, 0.6)
+
+    if matches is None:
+        return 1
 
 
-    # TODO ransac
-    ratio = 0.75
-    reprojThresh = 4.0
-    #matches, transformation_matrix, status = get_matches_LOFFIA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
-
+    # RANSAC
+    ratio, reprojThresh = 0.75, 4.0
     transformation_matrix, status = ransac_LOFFIA(keypoint_1, keypoint_2, matches, reprojThresh)
+
     if status is None:
         return 1
 
+
+    # TRANSFORMATION AND WARPING
     vis = draw_match_lines_LOFFIA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
@@ -244,7 +252,7 @@ def image_stitcher(img_path_1, img_path_2):
     result[0:height_1, 0:width_1] = img_1
 
 
-    # check to see if the keypoint matches should be visualized
+    # SHOW ALL THE STUFF
     if SHOW_ALL:
         show_image(harris_img_1)
         show_image(harris_img_2)
