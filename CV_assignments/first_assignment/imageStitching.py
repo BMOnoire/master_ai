@@ -13,6 +13,7 @@ RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
 SHOW_ALL = False
+TEST = False
 
 def get_script_variables():
     if len(sys.argv) != 3:
@@ -59,8 +60,6 @@ def show_image(img_src, filter = None, using_plot = False):
         plt.show()
     else:
         cv2.imshow("Image", img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
 
 def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
@@ -97,23 +96,6 @@ def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, di
     return img, keypoints
 
 
-def test_harris():
-    images_name = [
-        "images/test1.jpeg",
-        "images/test2.jpeg",
-        "images/img1.png",
-        "images/img2.png"
-    ]
-    range = [1, 2, 3, 5, 10, 15, 20, 30, 50]
-
-    for img in images_name:
-        img = get_image(img)
-        for size in range:
-            harris_img, h_corners_list = get_harris_corners(img, size, 0.001, True)
-            show_image(harris_img, cv2.COLOR_BGR2RGB)
-            print("Image [ ", img, " ]: ", len(h_corners_list), "corners")
-
-
 def get_sift(img_src, harris_keypoints):
     img = copy.deepcopy(img_src)
     kp = harris_keypoints
@@ -122,29 +104,105 @@ def get_sift(img_src, harris_keypoints):
     sift = cv2.xfeatures2d.SIFT_create()
     sift_keypoints, sift_descriptors = sift.compute(gray, kp)
     sift_img = cv2.drawKeypoints(gray, sift_keypoints, img)
-    #print("norm", len(kps), des[0])
+
     return sift_img, sift_keypoints, sift_descriptors
 
 
 ################################################################################
 ################################################################################
 ################################################################################
-def get_matches_LOFFIA(keypoints_1, keypoints_2, descriptors_1, descriptors_2, ratio, reprojThresh):
 
-    #TODO CHANGE THIS
+
+def match_euclidean_distance(des1, des2, threshold):
+    matches = []
+    for idx1, match1 in enumerate(des1):
+        # print(len(des1))
+        for idx2, match2 in enumerate(des2):
+            euclidean_distance = np.linalg.norm(match1 - match2)
+
+            if euclidean_distance < threshold:
+                print(euclidean_distance)
+                matches.append((idx2, idx1,euclidean_distance))
+
+    print(len(matches))
+    return matches
+
+def match_correlation(des1, des2, threshold):
+    matches=[]
+    for idx1, match1 in enumerate(des1):
+        # print(len(des1))
+        for idx2, match2 in enumerate(des2):
+            c = np.correlate(match1, match2) / len((match1) - 1)
+            if c > threshold:
+                matches.append((idx2, idx1,c))
+
+    return matches
+
+def get_matches_OLD(desc_list_1, desc_list_2, threshold):
+
+    def normal_correlation(desc1, desc2):
+        norm_desc_1 = (desc1 - np.mean(desc1)) / np.std(desc1)
+        norm_desc_2 = (desc2 - np.mean(desc2)) / np.std(desc2)
+        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(desc1) - 1)
+        if cc_value[0] > 1 or cc_value[0] < -1:
+            asd = 1
+        return cc_value[0]
+
+    matches = []
+    id = 1
+    for index_1, desc_1 in enumerate(desc_list_1):
+        best_score = -2
+        distance = None
+        for index_2, desc_2 in enumerate(desc_list_2):
+
+            next_score = normal_correlation(desc_1, desc_2)
+
+
+            if next_score >= best_score:
+                best_score = next_score
+                distance = np.linalg.norm(desc_2 - desc_1)
+
+        if best_score >= threshold:
+
+            match = {
+                "id": id,
+                "index_1": index_1,
+                "index_2": index_2,
+                "score": best_score,
+                "distance": distance
+            }
+            matches.append(match)
+            id = id + 1
+
+    return matches
+
+
+
+def get_matches(desc_1, desc_2, threshold_ratio):
     matcher = cv2.DescriptorMatcher_create("BruteForce")
-    rawMatches = matcher.knnMatch(descriptors_1, descriptors_2, 2)
-
+    rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
 
     matches = []
     # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
     for m in rawMatches:
-        if len(m) == 2 and m[0].distance < m[1].distance * ratio:
+        if len(m) == 2 and m[0].distance < m[1].distance * threshold_ratio:
             matches.append((m[0].trainIdx, m[0].queryIdx))
 
     # computing a homography requires at least 4 matches
     if len(matches) < 4:
-        return None, None, None
+        return None
+
+    #TODO test primi 100
+    if TEST:
+        matches = sorted(matches, key=lambda x: x[2], reverse=True)
+        matches = matches[0:99]
+        matches_kp = []
+        for m in matches:
+            matches.append((m[0], m[1]))
+
+    return matches
+
+def ransac_LOFFIA(keypoints_1, keypoints_2, matches, reprojThresh):
 
     # construct the two sets of points
     ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
@@ -154,8 +212,7 @@ def get_matches_LOFFIA(keypoints_1, keypoints_2, descriptors_1, descriptors_2, r
     matrix_H, status = cv2.findHomography( ptsB,ptsA, cv2.RANSAC, reprojThresh)
 
     # return the matches along with the homograpy matrix and status of each matched point
-    return matches, matrix_H, status
-
+    return matrix_H, status
 
 
 def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, status):
@@ -183,59 +240,7 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
 ################################################################################
 ################################################################################
 
-
-def get_matches(desc_list_1, desc_list_2, threshold):
-
-    def normal_correlation(desc1, desc2):
-        norm_desc_1 = (desc1 - np.mean(desc1)) / np.std(desc1)
-        norm_desc_2 = (desc2 - np.mean(desc2)) / np.std(desc2)
-        cc_value = np.correlate(norm_desc_1, norm_desc_2) / (len(desc1) - 1)
-        if cc_value[0] > 1 or cc_value[0] < -1:
-            asd = 1
-        return cc_value[0]
-
-    matches = []
-    id = 1
-    for index_1, desc_1 in enumerate(desc_list_1):
-        best_score = -2
-        distance = None
-        for index_2, desc_2 in enumerate(desc_list_2):
-
-            next_score = normal_correlation(desc_1, desc_2)
-
-
-            if next_score >= best_score:
-                best_score = next_score
-                distance = np.linalg.norm(desc_2 - desc_1)
-
-        if best_score >= threshold:
-
-
-            match = {
-                "id": id,
-                "index_1": index_1,
-                "index_2": index_2,
-                "score": best_score,
-                "distance": distance
-            }
-            matches.append(match)
-            id = id + 1
-
-    return matches
-
-
-def test_match_threshold():
-    # TODO
-    pass
-
-
-
-def main():
-    # get the image path and check if it is all correct
-    img_path_1, img_path_2 = get_script_variables()
-
-    if img_path_1 == None or img_path_2 == None:
-        return 1
+def image_stitcher(img_path_1, img_path_2):
 
     img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
     if RESIZE != 0:
@@ -244,28 +249,24 @@ def main():
     harris_img_1, harris_keypoints_1 = get_harris_corners(img_1, HARRIS_WINDOW_SIZE, 0.01, True)
     harris_img_2, harris_keypoints_2 = get_harris_corners(img_2, HARRIS_WINDOW_SIZE, 0.01, True)
 
-    if SHOW_ALL:
-        #TODO check sometimes the images are wrong but all works fine
-        show_image(harris_img_1, cv2.COLOR_BGR2RGB)
-        show_image(harris_img_2, cv2.COLOR_BGR2RGB)
-
     sift_img_1, sift_keypoints_1, sift_descriptors_1 = get_sift(img_1, harris_keypoints_1)
     sift_img_2, sift_keypoints_2, sift_descriptors_2 = get_sift(img_2, harris_keypoints_2)
 
-    if SHOW_ALL:
-        show_image(sift_img_1)
-        show_image(sift_img_2, cv2.COLOR_BGR2RGB)
 
     # TODO rivedere da qua
-    #matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
-
-
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
+
+    matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+    #matches = match_correlation(sift_descriptors_1, sift_descriptors_2, 0.6)
+
+
+    # TODO ransac
     ratio = 0.75
     reprojThresh = 4.0
+    #matches, transformation_matrix, status = get_matches_LOFFIA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
 
-    matches, transformation_matrix, status = get_matches_LOFFIA(keypoint_1, keypoint_2, sift_descriptors_1, sift_descriptors_2, ratio, reprojThresh)
+    transformation_matrix, status = ransac_LOFFIA(keypoint_1, keypoint_2, matches, reprojThresh)
     if status is None:
         return 1
 
@@ -273,24 +274,40 @@ def main():
 
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
     height_2, width_2 = img_2.shape[0], img_2.shape[1]
-    cv2.imshow("IMAGE 1", img_1)
-    cv2.imshow("IMAGE 2", img_2)
+
 
     new_size = (width_1 + width_2, height_1)
     result = cv2.warpPerspective(img_2, transformation_matrix, new_size)
-
-    cv2.imshow("STITCHING RESULT", result)
     result[0:height_1, 0:width_1] = img_1
-    cv2.imshow("STITCHING RESULT", result)
+
 
     # check to see if the keypoint matches should be visualized
+    if SHOW_ALL:
+        show_image(harris_img_1)
+        show_image(harris_img_2)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        show_image(sift_img_1)
+        show_image(sift_img_2)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-    #cv2.imshow("SHOW MATCHES", vis)
+    cv2.imshow("IMAGE 1", img_1)
+    cv2.imshow("IMAGE 2", img_2)
+    cv2.imshow("SHOW MATCHES", vis)
+    cv2.imshow("STITCHING RESULT", result)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     return 0
 
+
+def main():
+    # get the image path and check if it is all correct
+    img_path_1, img_path_2 = get_script_variables()
+    if img_path_1 == None or img_path_2 == None:
+        return 1
+    return image_stitcher(img_path_1, img_path_2)
 
 if __name__ == "__main__":
     main()
