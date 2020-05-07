@@ -6,13 +6,13 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 
-# conda install -c menpo opencv
 
 RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
 SHOW_ALL = False
 TEST = False
+
 
 def get_script_variables():
     if len(sys.argv) != 3:
@@ -111,22 +111,6 @@ def get_sift(img_src, harris_keypoints):
 ################################################################################
 ################################################################################
 
-
-def match_euclidean_distance(des1, des2, threshold):
-    matches = []
-    for idx1, match1 in enumerate(des1):
-        # print(len(des1))
-        for idx2, match2 in enumerate(des2):
-            euclidean_distance = np.linalg.norm(match1 - match2)
-
-            if euclidean_distance < threshold:
-                print(euclidean_distance)
-                matches.append((idx2, idx1,euclidean_distance))
-
-    print(len(matches))
-    return matches
-
-
 def match_correlation(des1, des2, threshold):
     matches=[]
     for idx1, match1 in enumerate(des1):
@@ -138,22 +122,20 @@ def match_correlation(des1, des2, threshold):
 
     return matches
 
-
-def get_matches(desc_1, desc_2, threshold_ratio):
-    matcher = cv2.DescriptorMatcher_create("BruteForce")
-    rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
-    ASD1= len(rawMatches)
+def match_euclidean_distance(des1, des2, threshold):
     matches = []
-    # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
-    for m in rawMatches:
-        asd = m
-        asd2 = len(m)
-        #if len(m) == 2 and m[0].distance < m[1].distance * threshold_ratio:
-        matches.append((m[0].trainIdx, m[0].queryIdx))
-    ASD2 = len(matches)
+    for idx1, match1 in enumerate(des1):
+        # print(len(des1))
+        for idx2, match2 in enumerate(des2):
+            euclidean_distance = np.linalg.norm(match1 - match2)
 
+            if euclidean_distance < threshold:
+                matches.append((idx2, idx1, euclidean_distance))
+    return matches
+
+def get_matches(desc_1, desc_2, threshold):
     matches2 = match_euclidean_distance(desc_1, desc_2, threshold_ratio)
-
+    matches = [ m[0:2] for m in matches2]
     #TODO qualche test
     return matches
 
@@ -196,7 +178,6 @@ def ransac_LOFFIA(keypoints_1, keypoints_2, matches, reprojThresh):
     # return the matches along with the homograpy matrix and status of each matched point
     return matrix_H, status
 
-
 def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, status):
     # initialize the output visualization image
     h_1, w_1 = img_1.shape[0], img_1.shape[1]
@@ -218,7 +199,6 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
 
     # return the visualization
     return vis
-
 
 ################################################################################
 ################################################################################
@@ -249,7 +229,9 @@ def image_stitcher(img_path_1, img_path_2):
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
 
+    #matches = get_matches_LOFFIA(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
     matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+
 
     if matches is None:
         return 1
