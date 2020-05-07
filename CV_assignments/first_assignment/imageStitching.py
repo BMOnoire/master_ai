@@ -97,31 +97,6 @@ def get_sift(img_src, harris_keypoints):
     return sift_img, sift_keypoints, sift_descriptors
 
 
-def get_matches_old(desc_1, desc_2, threshold_ratio):
-    matcher = cv2.DescriptorMatcher_create("BruteForce")
-    rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
-
-    matches = []
-    # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
-    for m in rawMatches:
-        if len(m) == 2 and m[0].distance < m[1].distance * threshold_ratio:
-            matches.append((m[0].trainIdx, m[0].queryIdx))
-
-    # computing a homography requires at least 4 matches
-    if len(matches) < 4:
-        return None
-
-    #TODO test primi 100
-    if TEST:
-        matches = sorted(matches, key=lambda x: x[2], reverse=True)
-        matches = matches[0:99]
-        matches_kp = []
-        for m in matches:
-            matches.append((m[0], m[1]))
-
-    return matches
-
-
 def get_matches(desc_list_1, desc_list_2, threshold):
     def ncc(d1, d2):
         norm_d1 = (d1 - np.mean(d1)) / np.std(d1)
@@ -138,52 +113,56 @@ def get_matches(desc_list_1, desc_list_2, threshold):
 
                 euclidean_distance = np.linalg.norm(desc_1 - desc_2)
                 if euclidean_distance < threshold:
-                    matches.append((idx_2, idx_1, euclidean_distance))
+                    matches.append((idx_1, idx_2))
 
+    #TODO test primi 100
+    if TEST:
+        matches = sorted(matches, key=lambda x: x[2], reverse=True)
+        matches = matches[0:99]
+        matches_kp = []
+        for m in matches:
+            matches.append((m[0], m[1]))
 
-    #matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
-    matches = [ m[0:2] for m in matches]
-    #TODO qualche test
     return matches
 
 
-def ransac_old(keypoints_1, keypoints_2, matches):
-    # computing a homography requires at least 4 matches
+def ransac(keypoints_1, keypoints_2, matches):
+
     if len(matches) < 4:
         return None, None
 
     # construct the two sets of points
-    ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
-    ptsB = np.float32([keypoints_2[i] for (i, _) in matches])
+    pts_1 = np.float32([keypoints_1[i] for (i, _) in matches])
+    pts_2 = np.float32([keypoints_2[i] for (_, i) in matches])
 
     # compute the homography between the two sets of points
-    matrix_H, status = cv2.findHomography( ptsB,ptsA, cv2.RANSAC, 4.0)
+    matrix_H, status = cv2.findHomography(pts_2, pts_1, cv2.RANSAC, 4.0)
 
     # return the matches along with the homograpy matrix and status of each matched point
     return matrix_H, status
 
 
-def draw_match_lines_old(img_1, img_2, keypoints_1, keypoints_2, matches, status):
+def draw_match_lines(img_1, img_2, keypoints_1, keypoints_2, matches, status):
     # initialize the output visualization image
     h_1, w_1 = img_1.shape[0], img_1.shape[1]
     h_2, w_2 = img_2.shape[0], img_2.shape[1]
 
-    vis = np.zeros((max(h_1, h_2), w_1 + w_2, 3), dtype="uint8")
+    img_match_lines = np.zeros((max(h_1, h_2), w_1 + w_2, 3), dtype="uint8")
 
-    vis[0:h_1, 0:w_1] = img_1
-    vis[0:h_2, w_2:]  = img_2
+    img_match_lines[0:h_1, 0:w_1] = img_1
+    img_match_lines[0:h_2, w_2:]  = img_2
 
     # loop over the matches
     for m, s in zip(matches, status):
         # only process the match if the keypoint was successfully matched
         if s == 1:
             trainIdx, queryIdx = m[0], m[1]
-            ptA = (int(keypoints_1[queryIdx][0]), int(keypoints_1[queryIdx][1]))
-            ptB = (int(keypoints_2[trainIdx][0]) + w_1, int(keypoints_2[trainIdx][1]))
-            cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
+            pt_1 = (int(keypoints_1[trainIdx][0]), int(keypoints_1[trainIdx][1]))
+            pt_2 = (int(keypoints_2[queryIdx][0]) + w_2, int(keypoints_2[queryIdx][1]))
+            cv2.line(img_match_lines, pt_1, pt_2, (0, 255, 0), 1)
 
     # return the visualization
-    return vis
+    return img_match_lines
 
 
 def image_stitcher(img_path_1, img_path_2):
@@ -216,13 +195,13 @@ def image_stitcher(img_path_1, img_path_2):
 
 
     # RANSAC
-    transformation_matrix, status = ransac_old(keypoint_1, keypoint_2, matches)
+    transformation_matrix, status = ransac(keypoint_1, keypoint_2, matches)
     if status is None:
         return 1
 
 
     # TRANSFORMATION AND WARPING
-    img_matching = draw_match_lines_old(img_1, img_2, keypoint_1, keypoint_2, matches, status)
+    img_matching = draw_match_lines(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
     height_2, width_2 = img_2.shape[0], img_2.shape[1]
