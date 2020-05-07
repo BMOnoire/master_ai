@@ -142,6 +142,24 @@ def match_correlation(des1, des2, threshold):
 def get_matches(desc_1, desc_2, threshold_ratio):
     matcher = cv2.DescriptorMatcher_create("BruteForce")
     rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
+    ASD1= len(rawMatches)
+    matches = []
+    # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
+    for m in rawMatches:
+        asd = m
+        asd2 = len(m)
+        #if len(m) == 2 and m[0].distance < m[1].distance * threshold_ratio:
+        matches.append((m[0].trainIdx, m[0].queryIdx))
+    ASD2 = len(matches)
+
+    matches2 = match_euclidean_distance(desc_1, desc_2, threshold_ratio)
+
+    #TODO qualche test
+    return matches
+
+def get_matches_LOFFIA(desc_1, desc_2, threshold_ratio):
+    matcher = cv2.DescriptorMatcher_create("BruteForce")
+    rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
 
     matches = []
     # ensure the distance is within a certain ratio of each other (i.e. Lowe's ratio test)
@@ -164,6 +182,9 @@ def get_matches(desc_1, desc_2, threshold_ratio):
     return matches
 
 def ransac_LOFFIA(keypoints_1, keypoints_2, matches, reprojThresh):
+    # computing a homography requires at least 4 matches
+    if len(matches) < 4:
+        return None, None
 
     # construct the two sets of points
     ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
@@ -224,6 +245,7 @@ def image_stitcher(img_path_1, img_path_2):
 
 
     # MATCHING TODO rivedere da qua
+    # get again the couple of pixel
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
 
@@ -232,9 +254,9 @@ def image_stitcher(img_path_1, img_path_2):
     if matches is None:
         return 1
 
-
     # RANSAC
     ratio, reprojThresh = 0.75, 4.0
+    #transformation_matrix = ransac2.ransac(matches, y, 100, 2, 0.1,)
     transformation_matrix, status = ransac_LOFFIA(keypoint_1, keypoint_2, matches, reprojThresh)
 
     if status is None:
