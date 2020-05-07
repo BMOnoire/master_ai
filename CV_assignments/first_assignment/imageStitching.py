@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
-SHOW_ALL = False
+SHOW_ALL = True
 TEST = False
 
 
@@ -107,35 +107,6 @@ def get_sift(img_src, harris_keypoints):
     return sift_img, sift_keypoints, sift_descriptors
 
 
-################################################################################
-################################################################################
-################################################################################
-#
-def get_matches(desc_1, desc_2, threshold):
-    # CORRELATION
-    #matches=[]
-    #for idx1, match1 in enumerate(des1):
-    #    for idx2, match2 in enumerate(des2):
-    #        c = np.correlate(match1, match2) / len((match1) - 1)
-    #        if c > threshold:
-    #            matches.append((idx2, idx1,c))
-
-    # EUCLIDEAN
-    matches = []
-    for idx1, match1 in enumerate(desc_1):
-        for idx2, match2 in enumerate(desc_2):
-            euclidean_distance = np.linalg.norm(match1 - match2)
-
-            if euclidean_distance < threshold:
-                matches.append((idx2, idx1, euclidean_distance))
-
-
-    #matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
-    matches = [ m[0:2] for m in matches]
-    #TODO qualche test
-    return matches
-
-
 def get_matches_old(desc_1, desc_2, threshold_ratio):
     matcher = cv2.DescriptorMatcher_create("BruteForce")
     rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
@@ -161,6 +132,31 @@ def get_matches_old(desc_1, desc_2, threshold_ratio):
     return matches
 
 
+def get_matches(desc_list_1, desc_list_2, threshold):
+    # CORRELATION
+    #matches=[]
+    #for idx1, match1 in enumerate(des1):
+    #    for idx2, match2 in enumerate(des2):
+    #        c = np.correlate(match1, match2) / len((match1) - 1)
+    #        if c > threshold:
+    #            matches.append((idx2, idx1,c))
+
+    # EUCLIDEAN
+    matches = []
+    for idx_1, desc_1 in enumerate(desc_list_1):
+        for idx_2, desc_2 in enumerate(desc_list_2):
+            euclidean_distance = np.linalg.norm(desc_1 - desc_2)
+
+            if euclidean_distance < threshold:
+                matches.append((idx_2, idx_1, euclidean_distance))
+
+
+    #matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
+    matches = [ m[0:2] for m in matches]
+    #TODO qualche test
+    return matches
+
+
 def ransac_old(keypoints_1, keypoints_2, matches):
     # computing a homography requires at least 4 matches
     if len(matches) < 4:
@@ -177,7 +173,7 @@ def ransac_old(keypoints_1, keypoints_2, matches):
     return matrix_H, status
 
 
-def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, status):
+def draw_match_lines_old(img_1, img_2, keypoints_1, keypoints_2, matches, status):
     # initialize the output visualization image
     h_1, w_1 = img_1.shape[0], img_1.shape[1]
     h_2, w_2 = img_2.shape[0], img_2.shape[1]
@@ -225,10 +221,9 @@ def image_stitcher(img_path_1, img_path_2):
 
     #matches = get_matches_old(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
     matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
-
-
     if matches is None:
         return 1
+
 
     # RANSAC
     transformation_matrix, status = ransac_old(keypoint_1, keypoint_2, matches)
@@ -237,7 +232,7 @@ def image_stitcher(img_path_1, img_path_2):
 
 
     # TRANSFORMATION AND WARPING
-    img_matching = draw_match_lines_LOFFIA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
+    img_matching = draw_match_lines_old(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
     height_2, width_2 = img_2.shape[0], img_2.shape[1]
@@ -248,16 +243,15 @@ def image_stitcher(img_path_1, img_path_2):
     panorama[0:height_1, 0:width_1] = img_1
 
 
-    # SHOW ALL THE STUFF
+    # SHOW IMAGES
     if SHOW_ALL:
-
-        show_image(harris_img_1)
-        show_image(harris_img_2)
+        cv2.imshow("IMAGE 1", harris_img_1)
+        cv2.imshow("IMAGE 2", harris_img_2)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        show_image(sift_img_1)
-        show_image(sift_img_2)
+        cv2.imshow("IMAGE 1", sift_img_1)
+        cv2.imshow("IMAGE 2", sift_img_2)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
