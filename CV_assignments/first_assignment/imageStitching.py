@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 RESIZE = 0
 HARRIS_WINDOW_SIZE = 3
 MATCH_THRESHOLD = 0.5
+SHOW_CORNERS = False
 SHOW_ALL = True
 TEST = False
 
@@ -48,17 +49,6 @@ def get_image(img_path, filter = None):
         return cv2.imread(img_path)
     else:
         return cv2.cvtColor(cv2.imread(img_path), filter)
-
-
-def show_image(img_src, filter = None, using_plot = False):
-    img = copy.deepcopy(img_src)
-    if using_plot:
-        if filter:
-            img = cv2.cvtColor(img, filter)
-        plt.imshow(img)
-        plt.show()
-    else:
-        cv2.imshow("Image", img)
 
 
 def get_harris_corners(img_src, blocksize, threshold, custom_threshold_logic, dilate_corners = False):
@@ -244,7 +234,7 @@ def image_stitcher(img_path_1, img_path_2):
 
 
     # SHOW IMAGES
-    if SHOW_ALL:
+    if SHOW_CORNERS:
         cv2.imshow("IMAGE 1", harris_img_1)
         cv2.imshow("IMAGE 2", harris_img_2)
         cv2.waitKey(0)
@@ -255,10 +245,12 @@ def image_stitcher(img_path_1, img_path_2):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    cv2.imshow("IMAGE 1", img_1)
-    cv2.imshow("IMAGE 2", img_2)
-    cv2.imshow("SHOW MATCHES", img_matching)
-    cv2.imshow("TRANSFORMATION", img_transformed)
+    if SHOW_ALL:
+        cv2.imshow("IMAGE 1", img_1)
+        cv2.imshow("IMAGE 2", img_2)
+        cv2.imshow("SHOW MATCHES", img_matching)
+        cv2.imshow("TRANSFORMATION", img_transformed)
+
     cv2.imshow("STITCHING RESULT", panorama)
 
     cv2.waitKey(0)
