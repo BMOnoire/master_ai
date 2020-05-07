@@ -123,22 +123,22 @@ def get_matches_old(desc_1, desc_2, threshold_ratio):
 
 
 def get_matches(desc_list_1, desc_list_2, threshold):
-    # CORRELATION
-    #matches=[]
-    #for idx1, match1 in enumerate(des1):
-    #    for idx2, match2 in enumerate(des2):
-    #        c = np.correlate(match1, match2) / len((match1) - 1)
-    #        if c > threshold:
-    #            matches.append((idx2, idx1,c))
+    def ncc(d1, d2):
+        norm_d1 = (d1 - np.mean(d1)) / np.std(d1)
+        norm_d2 = (d2 - np.mean(d2)) / np.std(d2)
+        return np.correlate(norm_d1, norm_d2) / (len(d1) - 1)
 
-    # EUCLIDEAN
+    # CORRELATION and EUCLIDEAN
     matches = []
     for idx_1, desc_1 in enumerate(desc_list_1):
         for idx_2, desc_2 in enumerate(desc_list_2):
-            euclidean_distance = np.linalg.norm(desc_1 - desc_2)
 
-            if euclidean_distance < threshold:
-                matches.append((idx_2, idx_1, euclidean_distance))
+            normal_cross_correlation = ncc(desc_1, desc_2)
+            if normal_cross_correlation > 0.5:
+
+                euclidean_distance = np.linalg.norm(desc_1 - desc_2)
+                if euclidean_distance < threshold:
+                    matches.append((idx_2, idx_1, euclidean_distance))
 
 
     #matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
