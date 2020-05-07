@@ -131,23 +131,13 @@ def match_euclidean_distance(des1, des2, threshold):
                 matches.append((idx2, idx1, euclidean_distance))
     return matches
 
-def get_matches(desc_list_1, desc__list_2, threshold):
-    matches = []
-    for idx_1, desc_1 in enumerate(desc_list_1):
-        for idx_2, desc_2 in enumerate(desc__list_2):
-            #c = np.correlate(match1, match2) / len((match1) - 1)
-            # if c > threshold:
-            #    matches.append((idx2, idx1, c))
-            eu_dist = np.linalg.norm(desc_2 - desc_1)
-            if eu_dist < threshold:
-                matches.append((idx_1, idx_2, eu_dist))
-
-
-    matches = [ m[0:2] for m in matches]
+def get_matches(desc_1, desc_2, threshold):
+    matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
+    matches = [ m[0:2] for m in matches2]
     #TODO qualche test
     return matches
 
-def get_matches_LOFFIA(desc_1, desc_2, threshold_ratio):
+def get_matches_old(desc_1, desc_2, threshold_ratio):
     matcher = cv2.DescriptorMatcher_create("BruteForce")
     rawMatches = matcher.knnMatch(desc_1, desc_2, 2)
 
@@ -171,27 +161,17 @@ def get_matches_LOFFIA(desc_1, desc_2, threshold_ratio):
 
     return matches
 
-def ransac_LOFFIA(keypoints_1, keypoints_2, matches, reprojThresh):
+def ransac_old(keypoints_1, keypoints_2, matches):
     # computing a homography requires at least 4 matches
     if len(matches) < 4:
         return None, None
-    a1 = len(keypoints_1)
-    a2 = len(keypoints_2)
-    a3 = len(matches)
 
-    for (_, i) in matches:
-        print("-1- ",i)
-
-    for (i, _) in matches:
-        print("-2- ", i)
-
-    print("tot ", matches)
     # construct the two sets of points
-    pts_1 = np.float32([keypoints_1[i] for (_, i) in matches])
-    pts_2 = np.float32([keypoints_2[i] for (i, _) in matches])
+    ptsA = np.float32([keypoints_1[i] for (_, i) in matches])
+    ptsB = np.float32([keypoints_2[i] for (i, _) in matches])
 
     # compute the homography between the two sets of points
-    matrix_H, status = cv2.findHomography( pts_1, pts_2, cv2.RANSAC, reprojThresh)
+    matrix_H, status = cv2.findHomography( ptsB,ptsA, cv2.RANSAC, 4.0)
 
     # return the matches along with the homograpy matrix and status of each matched point
     return matrix_H, status
@@ -207,10 +187,10 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
     vis[0:h_2, w_2:]  = img_2
 
     # loop over the matches
-    for ((trainIdx, queryIdx), s) in zip(matches, status):
+    for m, s in zip(matches, status):
         # only process the match if the keypoint was successfully matched
         if s == 1:
-            # draw the match
+            trainIdx, queryIdx = m[0], m[1]
             ptA = (int(keypoints_1[queryIdx][0]), int(keypoints_1[queryIdx][1]))
             ptB = (int(keypoints_2[trainIdx][0]) + w_1, int(keypoints_2[trainIdx][1]))
             cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
@@ -224,6 +204,7 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
 
 
 def image_stitcher(img_path_1, img_path_2):
+
 
     # GET IMAGES
     img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
@@ -245,38 +226,40 @@ def image_stitcher(img_path_1, img_path_2):
     # get again the couple of pixel
     keypoint_1 = np.float32([kp.pt for kp in sift_keypoints_1])
     keypoint_2 = np.float32([kp.pt for kp in sift_keypoints_2])
-#TODO
-    #matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
-    matches = get_matches_LOFFIA(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+
+    #matches = get_matches_old(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+    matches = get_matches(sift_descriptors_1, sift_descriptors_2, MATCH_THRESHOLD)
+
 
     if matches is None:
         return 1
 
     # RANSAC
-    ratio, reprojThresh = 0.75, 4.0
-    transformation_matrix, status = ransac_LOFFIA(keypoint_1, keypoint_2, matches, reprojThresh)
-
+    transformation_matrix, status = ransac_old(keypoint_1, keypoint_2, matches)
     if status is None:
         return 1
 
 
     # TRANSFORMATION AND WARPING
-    image_matches_visualized = draw_match_lines_LOFFIA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
+    img_matching = draw_match_lines_LOFFIA(img_1, img_2, keypoint_1, keypoint_2, matches, status)
 
     height_1, width_1 = img_1.shape[0], img_1.shape[1]
     height_2, width_2 = img_2.shape[0], img_2.shape[1]
 
     new_size = (width_1 + width_2, height_1)
-    image_panorama = cv2.warpPerspective(img_2, transformation_matrix, new_size)
-    image_panorama[0:height_1, 0:width_1] = img_1
+    img_transformed = cv2.warpPerspective(img_2, transformation_matrix, new_size)
+    panorama = copy.deepcopy(img_transformed)
+    panorama[0:height_1, 0:width_1] = img_1
 
 
     # SHOW ALL THE STUFF
     if SHOW_ALL:
+
         show_image(harris_img_1)
         show_image(harris_img_2)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
         show_image(sift_img_1)
         show_image(sift_img_2)
         cv2.waitKey(0)
@@ -284,8 +267,9 @@ def image_stitcher(img_path_1, img_path_2):
 
     cv2.imshow("IMAGE 1", img_1)
     cv2.imshow("IMAGE 2", img_2)
-    cv2.imshow("SHOW MATCHES", image_matches_visualized)
-    cv2.imshow("STITCHING RESULT", image_panorama)
+    cv2.imshow("SHOW MATCHES", img_matching)
+    cv2.imshow("TRANSFORMATION", img_transformed)
+    cv2.imshow("STITCHING RESULT", panorama)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
