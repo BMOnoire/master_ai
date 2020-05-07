@@ -110,32 +110,31 @@ def get_sift(img_src, harris_keypoints):
 ################################################################################
 ################################################################################
 ################################################################################
+#
+def get_matches(desc_1, desc_2, threshold):
+    # CORRELATION
+    #matches=[]
+    #for idx1, match1 in enumerate(des1):
+    #    for idx2, match2 in enumerate(des2):
+    #        c = np.correlate(match1, match2) / len((match1) - 1)
+    #        if c > threshold:
+    #            matches.append((idx2, idx1,c))
 
-def match_correlation(des1, des2, threshold):
-    matches=[]
-    for idx1, match1 in enumerate(des1):
-        for idx2, match2 in enumerate(des2):
-            c = np.correlate(match1, match2) / len((match1) - 1)
-            if c > threshold:
-                matches.append((idx2, idx1,c))
-
-    return matches
-
-def match_euclidean_distance(des1, des2, threshold):
+    # EUCLIDEAN
     matches = []
-    for idx1, match1 in enumerate(des1):
-        for idx2, match2 in enumerate(des2):
+    for idx1, match1 in enumerate(desc_1):
+        for idx2, match2 in enumerate(desc_2):
             euclidean_distance = np.linalg.norm(match1 - match2)
 
             if euclidean_distance < threshold:
                 matches.append((idx2, idx1, euclidean_distance))
-    return matches
 
-def get_matches(desc_1, desc_2, threshold):
-    matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
-    matches = [ m[0:2] for m in matches2]
+
+    #matches2 = match_euclidean_distance(desc_1, desc_2, threshold)
+    matches = [ m[0:2] for m in matches]
     #TODO qualche test
     return matches
+
 
 def get_matches_old(desc_1, desc_2, threshold_ratio):
     matcher = cv2.DescriptorMatcher_create("BruteForce")
@@ -161,6 +160,7 @@ def get_matches_old(desc_1, desc_2, threshold_ratio):
 
     return matches
 
+
 def ransac_old(keypoints_1, keypoints_2, matches):
     # computing a homography requires at least 4 matches
     if len(matches) < 4:
@@ -175,6 +175,7 @@ def ransac_old(keypoints_1, keypoints_2, matches):
 
     # return the matches along with the homograpy matrix and status of each matched point
     return matrix_H, status
+
 
 def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, status):
     # initialize the output visualization image
@@ -198,13 +199,8 @@ def draw_match_lines_LOFFIA(img_1, img_2, keypoints_1, keypoints_2, matches, sta
     # return the visualization
     return vis
 
-################################################################################
-################################################################################
-################################################################################
-
 
 def image_stitcher(img_path_1, img_path_2):
-
 
     # GET IMAGES
     img_1, img_2 = get_image(img_path_1), get_image(img_path_2)
