@@ -112,11 +112,24 @@ def tokenize_sentence(book):
 
 
 def preprocessing_corpus(book_list):
+    # take paragraphs and sentences
     for book in book_list:
         split_paragraphs_and_sentences(book)
 
+    # take tokens bigrams and trigrams
     for book in book_list:
         tokenize_sentence(book)
+
+    data = [
+        [(word.replace(",", "")
+          .replace(".", "")
+          .replace("(", "")
+          .replace(")", ""))
+         for word in row[2].lower().split()]
+        for row in reader]
+
+    ## Removes header
+    #data = data[1:]
 
     return book_list
 
