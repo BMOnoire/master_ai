@@ -18,12 +18,10 @@ from nltk.probability import FreqDist
 import matplotlib.pyplot as plt
 import time
 import pickle
-
-
-fictions_path = Path("./fictions/")
-data_path = Path("./data/")
+import config
 
 def create_dir(path):
+    path = str(path)
     if os.path.exists(path):
         print("Directory %s exists" % path)
         return True
@@ -35,6 +33,20 @@ def create_dir(path):
     else:
         print("Successfully created the directory %s " % path)
         return True
+
+
+def picke_load(pickle_path):
+    if pickle_path.exists():
+        pickle_in = open(str(pickle_path), "rb")
+        return pickle.load(pickle_in)
+    else:
+        return None
+
+
+def pickle_save(object, pickle_path):
+    pickle_out = open(str(pickle_path), "wb")
+    pickle.dump(object, pickle_out)
+    pickle_out.close()
 
 
 def extract_books(path):
@@ -81,8 +93,6 @@ def split_paragraphs_and_sentences(book):
 
 
 def tokenize_sentence(book):
-    # TODO check 48 -611 bigrams
-
     token_list, bigram_list, trigram_list = [], [], []
     for i, sntc in enumerate(book["sentences"]):
         tokens = word_tokenize(sntc)
@@ -101,30 +111,34 @@ def tokenize_sentence(book):
     book["token_frequency"] = all_token_frequency
 
 
+def preprocessing_corpus(book_list):
+    for book in book_list:
+        split_paragraphs_and_sentences(book)
+
+    for book in book_list:
+        tokenize_sentence(book)
+
+    return book_list
+
+
 def main():
     start_time = time.time()
 
-    book_list = []
-    if not create_dir(str(data_path)):
-        return 1
+    pickle_file = config.general["pickle_path"] / "book_list.pickle"
 
-    pickle_path = data_path / "book_list.pickle"
+    # try to load pickel
+    book_list = picke_load(pickle_file)
 
-    if pickle_path.exists():
-        pickle_in = open(str(pickle_path), "rb")
-        book_list = pickle.load(pickle_in)
-    else:
-        book_list = extract_books(fictions_path)
+    # if there is no pickels extract corpus
+    if book_list == None:
+        if not create_dir(config.general["pickle_path"]):
+            return 1
 
-        for book in book_list:
-            split_paragraphs_and_sentences(book)
+        book_list = extract_books(config.general["corpus_path"])
 
-        for book in book_list:
-            tokenize_sentence(book)
+        book_list = preprocessing_corpus(book_list)
 
-        pickle_out = open(str(pickle_path), "wb")
-        pickle.dump(book_list, pickle_out)
-        pickle_out.close()
+        pickle_save(book_list, pickle_file)
 
     print("--- %s seconds ---" % (time.time() - start_time))
 
