@@ -1,6 +1,6 @@
 import os
 import nltk
-import nltk.corpus
+#import nltk.corpus
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -13,40 +13,13 @@ import re
 from os import path
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 from nltk.tokenize import word_tokenize, blankline_tokenize, sent_tokenize
+from nltk.corpus import stopwords
 from nltk.util import bigrams, trigrams, ngrams
 from nltk.probability import FreqDist
 import matplotlib.pyplot as plt
 import time
-import pickle
 import config
-
-def create_dir(path):
-    path = str(path)
-    if os.path.exists(path):
-        print("Directory %s exists" % path)
-        return True
-    try:
-        os.mkdir(path)
-    except OSError:
-        print("Creation of the directory %s failed" % path)
-        return False
-    else:
-        print("Successfully created the directory %s " % path)
-        return True
-
-
-def picke_load(pickle_path):
-    if pickle_path.exists():
-        pickle_in = open(str(pickle_path), "rb")
-        return pickle.load(pickle_in)
-    else:
-        return None
-
-
-def pickle_save(object, pickle_path):
-    pickle_out = open(str(pickle_path), "wb")
-    pickle.dump(object, pickle_out)
-    pickle_out.close()
+import janitor as jn
 
 
 def extract_books(path):
@@ -59,12 +32,12 @@ def extract_books(path):
             return 1
 
         text = docx2txt.process(path / file_name)
-
+        asd = text.lower()
         book = {
             "id": int(correct_regex.group(1)),
             "year": int(correct_regex.group(2)),
             "title": correct_regex.group(3),
-            "text": text
+            "original_text": text
         }
         list.append(book)
 
@@ -77,89 +50,111 @@ def extract_books(path):
     return list
 
 
-def split_paragraphs_and_sentences(book):
-        text = book["text"]
-        indx = text.find("Lovecraft") + len("Lovecraft")
-        eol = True
-        while eol:
-            if text[indx] != "\n" and text[indx] != " ":
-                eol = False
-            else:
-                indx += 1
-        text = text[indx:]
-        book["text"] = text
-        book["paragraphs"] = blankline_tokenize(text)
-        book["sentences"] = sent_tokenize(text)
-
-
-def tokenize_sentence(book):
-    token_list, bigram_list, trigram_list = [], [], []
-    for i, sntc in enumerate(book["sentences"]):
-        tokens = word_tokenize(sntc)
-        bigrams = list(nltk.bigrams(tokens))
-        trigrams = list(nltk.trigrams(tokens))
-        token_list.append(tokens)
-        bigram_list.append(bigrams)
-        trigram_list.append(trigrams)
-
-    fdist = FreqDist(word.lower() for word in word_tokenize(book["text"]))
-    all_token_frequency = list(fdist.items())
-
-    book["token_list"] = token_list
-    book["bigram_list"] = bigram_list
-    book["trigram_list"] = trigram_list
-    book["token_frequency"] = all_token_frequency
-
-
-def preprocessing_corpus(book_list):
-    # take paragraphs and sentences
-    for book in book_list:
-        split_paragraphs_and_sentences(book)
-
-    # take tokens bigrams and trigrams
-    for book in book_list:
-        tokenize_sentence(book)
-
-    data = [
-        [(word.replace(",", "")
-          .replace(".", "")
-          .replace("(", "")
-          .replace(")", ""))
-         for word in row[2].lower().split()]
-        for row in reader]
-
-    ## Removes header
-    #data = data[1:]
-
-    return book_list
+def cut_title(text):
+    indx = text.find("Lovecraft") + len("Lovecraft")
+    eol = True
+    while eol:
+        if text[indx] != "\n" and text[indx] != " ":
+            eol = False
+        else:
+            indx += 1
+    return text[indx:]
 
 
 def main():
+
     start_time = time.time()
 
     pickle_file = config.general["pickle_path"] / "book_list.pickle"
 
     # try to load pickel
-    book_list = picke_load(pickle_file)
+    book_list = jn.pickle_load(pickle_file)
 
     # if there is no pickels extract corpus
     if book_list == None:
-        if not create_dir(config.general["pickle_path"]):
+        if not jn.create_dir(config.general["pickle_path"]):
             return 1
 
         book_list = extract_books(config.general["corpus_path"])
 
-        book_list = preprocessing_corpus(book_list)
+        # cut title, add paragraphs and sentences
+        for book in book_list:
+            book["original_text"] = cut_title(book["original_text"])
+            book["paragraphs"] = blankline_tokenize(book["original_text"])
+            book["sentences"] = sent_tokenize(book["original_text"])
 
-        pickle_save(book_list, pickle_file)
+        # add tokens bigrams and trigrams
+        for book in book_list:
+            token_list, bigram_list, trigram_list = [], [], []
+            for sntc in book["sentences"]:
+                tokens = word_tokenize(sntc)
+                bigrams = list(nltk.bigrams(tokens))
+                trigrams = list(nltk.trigrams(tokens))
+                token_list.append(tokens)
+                bigram_list.append(bigrams)
+                trigram_list.append(trigrams)
 
-    print("--- %s seconds ---" % (time.time() - start_time))
+            book["token_list"] = token_list
+            book["bigram_list"] = bigram_list
+            book["trigram_list"] = trigram_list
+
+        # add word freq
+        for book in book_list:
+            fdist = FreqDist(word.lower() for word in word_tokenize(book["original_text"]))
+            all_token_frequency = list(fdist.items())
+            book["token_frequency"] = all_token_frequency
+
+        jn.pickle_save(book_list, pickle_file)
+
+    print("--- Preprocessing lasts %s seconds ---" % (time.time() - start_time))
+
+
+
+
+
+
+    atmom = book_list[56]
+
+
+
+
+
+
+
+
+    #stopwords_txt = set(open(config.general['stopwords']).read().split())
+    stopwords = set(nltk.corpus.stopwords.words('english'))
+    stopwords.update(set(STOPWORDS))
+
+    #data = [
+    #    [(word.replace(",", "")
+    #      .replace(".", "")
+    #      .replace("(", "")
+    #      .replace(")", ""))
+    #     for word in row[2].lower().split()]
+    #    for row in reader]
+
+    ## Removes header
+    #data = data[1:]
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     #WORD CLOUD
     all_text = ""
     for book in book_list:
-        all_text = all_text + book["text"]
+        all_text = all_text + book["original_text"]
     print("There are {} words in the combination of all review.".format(len(all_text)))
 
     # Create and generate a word cloud image:
@@ -173,7 +168,7 @@ def main():
     #plt.show()
 
     # Create stopword list:
-    stopwords = set(STOPWORDS)
+
     stopwords.update([
         "hi",
         "was",
