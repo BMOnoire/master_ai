@@ -25,6 +25,8 @@ import time
 import config
 import janitor as jn
 import tf_idf
+import spacy
+from spacy import displacy
 
 def cut_title(text):
     indx = text.find("Lovecraft") + len("Lovecraft")
@@ -114,7 +116,7 @@ def main():
 
         #for word in book.lower().split():
         #preprocessed text
-        punctuation = re.compile(r'[-.,?!:;()|0-9]')
+        punctuation = re.compile(r'[.,?!:;()|0-9]') #-
         for book in book_list:
             preprocessed_sentences = []
             preprocessed_token_list, preprocessed_bigram_list, preprocessed_trigram_list = [], [], []
@@ -208,6 +210,11 @@ def main():
     asd = tf_idf_dictionary_nsw[1]
 
     asd = {k: v for k, v in asd.items() if v > 0.002}
+
+    text = dagon["original"]["text"]
+    nlp = spacy.load("en_core_web_sm")
+    doc = nlp(text)
+    displacy.serve(doc, style="ent")  #
     return 1
     tkn = atmom["preprocess"]["token_list"][0]
     # POS
